@@ -2,84 +2,16 @@
 //
 
 #include "stdafx.h"
+#include "OTL_Header.h"
 #include "DataInterchange.h"
 #include "BatchControlInfo.h"
 #include "ReturnBatch.h"
 #include "Acknowledgement.h"
 
 #include "TAP_Constants.h"
+#include "ConfigContainer.h"
+#include "TAPValidator.h"
 
-#define OTL_ORA9I // Compile OTL 4.0/OCI9i
-// #define OTL_ORA8
-// #define OTL_ORA8I
-
-#if defined(_MSC_VER) // VC++
-
-// Enabling support for 64-bit signed integers
-// Since 64-bit integers are not part of the ANSI C++
-// standard, this definition is compiler specific.
-#define OTL_BIGINT __int64
-
-// Defining a bigint constant that is larger than
-// the max 32-bit integer value.
-const OTL_BIGINT BIGINT_VAL1=12345678901234000;
-
-// Defining a string-to-bigint conversion 
-// that is used by OTL internally.
-// Since 64-bit ineteger conversion functions are
-// not part of the ANSI C++ standard, the code
-// below is compiler specific
-#define OTL_STR_TO_BIGINT(str,n)                \
-{                                               \
-  n=_atoi64(str);                               \
-}
-
-// Defining a bigint-to-string conversion 
-// that is used by OTL internally.
-// Since 64-bit ineteger conversion functions are
-// not part of the ANSI C++ standard, the code
-// below is compiler specific
-#define OTL_BIGINT_TO_STR(n,str)                \
-{                                               \
-  _i64toa(n,str,10);                            \
-}
-
-#elif defined(__GNUC__) // GNU C++
-
-#include <stdlib.h>
-
-// Enabling support for 64-bit signed integers
-// Since 64-bit integers are not part of the ANSI C++
-// standard, this definition is compiler specific.
-#define OTL_BIGINT long long
-
-const OTL_BIGINT BIGINT_VAL1=12345678901234000LL;
-
-// Defining a string-to-bigint conversion 
-// that is used by OTL internally.
-// Since 64-bit ineteger conversion functions are
-// not part of the ANSI C++ standard, the code
-// below is compiler specific.
-#define OTL_STR_TO_BIGINT(str,n)                \
-{                                               \
-  n=strtoll(str,0,10);                          \
-}
-
-// Defining a bigint-to-string conversion 
-// that is used by OTL internally.
-// Since 64-bit ineteger conversion functions are
-// not part of the ANSI C++ standard, the code
-// below is compiler specific
-#define OTL_BIGINT_TO_STR(n,str)                \
-{                                               \
-  sprintf(str,"%lld",n);                        \
-}
-
-
-#endif
-
-#define OTL_STL
-#include "otlv4.h"
 
 const char *pShortName;
 unsigned char* buffer = NULL;		// буфер для загрузки содержимого файла
@@ -91,6 +23,7 @@ int debugMode = 0;
 DataInterChange* dataInterchange = NULL;
 ReturnBatch* returnBatch = NULL;
 Acknowledgement* acknowledgement = NULL;
+Config config;
 
 otl_connect otlConnect;
 otl_connect otlLogConnect;
@@ -102,7 +35,7 @@ enum FileType {
 	ftRAPAcknowledgement = 2
 };
 
-extern "C" int _search4tag(const void *ap, const void *bp);
+//extern "C" int _search4tag(const void *ap, const void *bp);
 
 //-----------------------------
 void logToFile(string message)
@@ -110,36 +43,43 @@ void logToFile(string message)
 	time_t t = time(0);   // get time now
     struct tm * now = localtime( & t );
 	
-	(ofsLog.is_open() ? ofsLog : cout) << now->tm_mday << '.' << (now->tm_mon + 1) << '.' << (now->tm_year + 1900) << ' ' << now->tm_hour << ':' << now->tm_min << ':' << now->tm_sec << ' ' << message << endl;
+	(ofsLog.is_open() ? ofsLog : cout) << now->tm_mday << '.' << (now->tm_mon + 1) << '.' << (now->tm_year + 1900) << ' ' 
+		<< now->tm_hour << ':' << now->tm_min << ':' << now->tm_sec << ' ' << message << endl;
 }
 //-----------------------------
-void log(short msgType, string msgText)
+void log(string filename, short msgType, string msgText)
 {
 	otl_stream otlLog;
-	
-	if ( otlLogConnect.connected ) {
-		if(msgText.length() > 2048)
+
+	if (otlLogConnect.connected) {
+		if (msgText.length() > 2048)
 			msgText = msgText.substr(0, 2048);
 		try {
-			otlLog.open(1, "insert into BILLING.TAP3LOADER_LOG (datetime, filename, msg_type, msg_text) values (sysdate, :fn /*char[255]*/, :msg_type/*short*/, :msg_text /*char[2048]*/)", otlLogConnect);
-			otlLog << pShortName << msgType << msgText;
+			otlLog.open(1, "insert into BILLING.TAP3LOADER_LOG (datetime, filename, msg_type, msg_text) "
+				"values (sysdate, :fn /*char[255]*/, :msg_type/*short*/, :msg_text /*char[2048]*/)", otlLogConnect);
+			otlLog << filename << msgType << msgText;
 		}
 		catch (otl_exception &otlEx) {
 			string msg = "Unable to write log message to DB: ";
 			msg += msgText;
 			logToFile(msg);
-			logToFile((char*)otlEx.msg);
+			logToFile((char*) otlEx.msg);
 			if (strlen(otlEx.stm_text) > 0)
-				logToFile((char*)otlEx.stm_text); // log SQL that caused the error
+				logToFile((char*) otlEx.stm_text); // log SQL that caused the error
 			if (strlen(otlEx.var_info) > 0)
-				logToFile((char*)otlEx.var_info); // log the variable that caused the error
+				logToFile((char*) otlEx.var_info); // log the variable that caused the error
 		}
 	}
 	else {
-		logToFile( to_string( static_cast<unsigned long long> (msgType)) + '\t' + msgText );
+		logToFile(to_string(static_cast<unsigned long long> ( msgType )) + '\t' + msgText);
 	}
 }
 //------------------------------
+void log(short msgType, string msgText)
+{
+	log(pShortName, msgType, msgText);
+}
+//--------------------------------
 int assign_integer_option(string _name, string _value, long& param, long minValid, long maxValid)
 {
 	size_t stoi_idx;
@@ -162,7 +102,7 @@ int assign_integer_option(string _name, string _value, long& param, long minVali
 	return 0;
 }
 //----------------------------
-static int write_out(const void *buffer, size_t size, void *app_key) {
+int write_out(const void *buffer, size_t size, void *app_key) {
 	FILE *out_fp = (FILE*) app_key;
 	size_t wrote = fwrite(buffer, 1, size, out_fp);
 	return (wrote == size) ? 0 : -1;
@@ -1002,7 +942,6 @@ void Finalize(bool bSuccess = false)
 	if (buffer ) delete [] buffer;
 }
 //------------------------------
-
 int LoadTAPFileToDB( unsigned char* buffer, long dataLen, long fileID, bool bPrintOnly ) 
 {
 	int index=0;
@@ -1071,39 +1010,35 @@ int LoadTAPFileToDB( unsigned char* buffer, long dataLen, long fileID, bool bPri
 		}
 
 		// Procesing Transfer Batch
-		// проверка наличия обязательных структур в Transfer Batch
-		if( !dataInterchange->choice.transferBatch.batchControlInfo || !dataInterchange->choice.transferBatch.accountingInfo ||
-			!dataInterchange->choice.transferBatch.networkInfo ||
-			!dataInterchange->choice.transferBatch.auditControlInfo || !dataInterchange->choice.transferBatch.callEventDetails)
-		{
-			log( LOG_ERROR, "Some mandatory structures are missing in Transfer Batch");
-			return TL_MISSINGSTRUCT;
-		}
+		
 
 		// проверка наличия обязательных структур в Transfer Batch/Batch Control Information
-		if(!dataInterchange->choice.transferBatch.batchControlInfo->sender  || !dataInterchange->choice.transferBatch.batchControlInfo->recipient ||
-			!dataInterchange->choice.transferBatch.batchControlInfo->fileSequenceNumber || 
-			!dataInterchange->choice.transferBatch.batchControlInfo->transferCutOffTimeStamp || !dataInterchange->choice.transferBatch.batchControlInfo->fileAvailableTimeStamp )
-		{
-			log( LOG_ERROR, "Some mandatory structures are missing in Transfer Batch/Batch Control Information");
-			return TL_MISSINGSTRUCT;
-		}
+		// MOVED TO TAPValidator
+		TAPValidator tapValidator(otlConnect, config);
+		TAPValidationResult validationRes = tapValidator.Validate(dataInterchange);
+		// if(!dataInterchange->choice.transferBatch.batchControlInfo->sender  || !dataInterchange->choice.transferBatch.batchControlInfo->recipient ||
+		//	!dataInterchange->choice.transferBatch.batchControlInfo->fileSequenceNumber || 
+		//	!dataInterchange->choice.transferBatch.batchControlInfo->transferCutOffTimeStamp || !dataInterchange->choice.transferBatch.batchControlInfo->fileAvailableTimeStamp )
+		//{
+		//	log( LOG_ERROR, "Some mandatory structures are missing in Transfer Batch/Batch Control Information");
+		//	return TL_MISSINGSTRUCT;
+		//}
 
-		// проверка наличия обязательных структур в Transfer Batch/Accounting Information
-		if(!dataInterchange->choice.transferBatch.accountingInfo->localCurrency || !dataInterchange->choice.transferBatch.accountingInfo->tapDecimalPlaces ||
-			!dataInterchange->choice.transferBatch.accountingInfo->currencyConversionInfo || !dataInterchange->choice.transferBatch.accountingInfo->tapDecimalPlaces)
-		{
-			log( LOG_ERROR, "Some mandatory structures are missing in Transfer Batch/Accounting Information");
-			return TL_MISSINGSTRUCT;
-		}
+		//// проверка наличия обязательных структур в Transfer Batch/Accounting Information
+		//if(!dataInterchange->choice.transferBatch.accountingInfo->localCurrency || !dataInterchange->choice.transferBatch.accountingInfo->tapDecimalPlaces ||
+		//	!dataInterchange->choice.transferBatch.accountingInfo->currencyConversionInfo || !dataInterchange->choice.transferBatch.accountingInfo->tapDecimalPlaces)
+		//{
+		//	log( LOG_ERROR, "Some mandatory structures are missing in Transfer Batch/Accounting Information");
+		//	return TL_MISSINGSTRUCT;
+		//}
 
 
-		// проверка наличия обязательных структур в Transfer Batch/Network Information
-		if(!dataInterchange->choice.transferBatch.networkInfo->utcTimeOffsetInfo || !dataInterchange->choice.transferBatch.networkInfo->recEntityInfo)
-		{
-			log( LOG_ERROR, "Some mandatory structures are missing in Transfer Batch/Network Information");
-			return TL_MISSINGSTRUCT;
-		}
+		//// проверка наличия обязательных структур в Transfer Batch/Network Information
+		//if(!dataInterchange->choice.transferBatch.networkInfo->utcTimeOffsetInfo || !dataInterchange->choice.transferBatch.networkInfo->recEntityInfo)
+		//{
+		//	log( LOG_ERROR, "Some mandatory structures are missing in Transfer Batch/Network Information");
+		//	return TL_MISSINGSTRUCT;
+		//}
 
 		dblTAPPower=pow( (double) 10, *dataInterchange->choice.transferBatch.accountingInfo->tapDecimalPlaces);
 		string fn;
@@ -1188,7 +1123,7 @@ int LoadTAPFileToDB( unsigned char* buffer, long dataLen, long fileID, bool bPri
 				break;
 			default:
 				if (!debugMode) {
-					log( LOG_ERROR, string("No handler for call event detail type=") + to_string( static_cast<unsigned long long> (dataInterchange->choice.transferBatch.callEventDetails->list.array[index-1]->present)) +
+					log(pShortName, LOG_ERROR, string("No handler for call event detail type=") + to_string( static_cast<unsigned long long> (dataInterchange->choice.transferBatch.callEventDetails->list.array[index-1]->present)) +
 						string(". Call number=") + to_string(static_cast<unsigned long long> (index)));
 					return TL_NEWCOMPONENT;
 				}
@@ -1199,13 +1134,13 @@ int LoadTAPFileToDB( unsigned char* buffer, long dataLen, long fileID, bool bPri
 		// обработка Audit Control Info
 		if(!dataInterchange->choice.transferBatch.auditControlInfo->totalCharge || !dataInterchange->choice.transferBatch.auditControlInfo->callEventDetailsCount)
 		{
-			log( LOG_ERROR, "Some mandatory structures are missing in Transfer Batch/Audit Control Information");
+			log(pShortName, LOG_ERROR, "Some mandatory structures are missing in Transfer Batch/Audit Control Information");
 			return TL_WRONGCODE;
 		}
 	
 		if(index-1 != *dataInterchange->choice.transferBatch.auditControlInfo->callEventDetailsCount)
 		{
-			log(LOG_ERROR, "Calculated call event count (" + to_string(static_cast<unsigned long long> (index))+") differs from one in Audit Control Information ( " +
+			log(pShortName, LOG_ERROR, "Calculated call event count (" + to_string(static_cast<unsigned long long> (index))+") differs from one in Audit Control Information ( " +
 				to_string( static_cast<unsigned long long> (*dataInterchange->choice.transferBatch.auditControlInfo->callEventDetailsCount)) +
 				").");
 			return TL_AUDITFAULT;
@@ -1213,7 +1148,7 @@ int LoadTAPFileToDB( unsigned char* buffer, long dataLen, long fileID, bool bPri
 
 		if(!debugMode && totalCharge != OctetStr2Int64(*dataInterchange->choice.transferBatch.auditControlInfo->totalCharge))
 		{
-			log(LOG_ERROR, "Calculated total charge (" + to_string(static_cast<unsigned long double> (totalCharge / dblTAPPower)) + ") differs from Audit Control Information/TotalCharge (" +
+			log(pShortName, LOG_ERROR, "Calculated total charge (" + to_string(static_cast<unsigned long double> (totalCharge / dblTAPPower)) + ") differs from Audit Control Information/TotalCharge (" +
 				to_string( static_cast<long double> (OctetStr2Int64(*dataInterchange->choice.transferBatch.auditControlInfo->totalCharge)/dblTAPPower)) + ").");
 			return TL_AUDITFAULT;
 		}
@@ -1222,18 +1157,18 @@ int LoadTAPFileToDB( unsigned char* buffer, long dataLen, long fileID, bool bPri
 	}
 	catch (otl_exception &otlEx) {
 		otlConnect.rollback();
-		log( LOG_ERROR, "DB error while processing CDR records:");
-		log( LOG_ERROR, (char*) otlEx.msg);
+		log(pShortName,  LOG_ERROR, "DB error while processing CDR records:");
+		log(pShortName,  LOG_ERROR, (char*) otlEx.msg);
 		if( strlen(otlEx.stm_text) > 0 )
-			log( LOG_ERROR, (char*) otlEx.stm_text ); // log SQL that caused the error
+			log(pShortName,  LOG_ERROR, (char*) otlEx.stm_text ); // log SQL that caused the error
 		if( strlen(otlEx.var_info) > 0 )
-			log( LOG_ERROR, (char*) otlEx.var_info ); // log the variable that caused the error
+			log(pShortName,  LOG_ERROR, (char*) otlEx.var_info ); // log the variable that caused the error
 		return TL_ORACLEERROR;
 	}
 	
 	catch(char* pMess)
 	{
-		log( LOG_ERROR, string("Exception caught: ") + string(pMess) + string(". Call number=") + to_string( static_cast<unsigned long long> (index)));
+		log(pShortName, LOG_ERROR, string("Exception caught: ") + string(pMess) + string(". Call number=") + to_string( static_cast<unsigned long long> (index)));
 		return TL_WRONGCODE;
 	}
 	return TL_OK;
@@ -1745,7 +1680,7 @@ int main(int argc, const char* argv[])
 	try {
 
 		// чтение файла конфигурации
-		string line;
+		/*string line;
 		string option_name;
 		string option_value;
 		string connectString;
@@ -1792,13 +1727,28 @@ int main(int argc, const char* argv[])
 					ftpDirectory = option_value;
 			}
 		}
+		ifsSettings.close();*/
+
+		ifstream ifsSettings("TAP3Loader.cfg", ifstream::in);
+		if (!ifsSettings.is_open())	{
+			fprintf( stderr, "Unable to open config file TAP3Loader.cfg");
+			if( buffer ) delete [] buffer;
+			return TL_PARAM_ERROR;
+		}
+		config.ReadConfigFile(ifsSettings);
 		ifsSettings.close();
 
-		if(connectString.length() == 0) {
+		if (config.GetConnectString().empty()) {
+			log(LOG_ERROR, "Connect string to DB is not found in TAP3Loader.cfg file. Exiting.");
+			ofsLog.close();
+			exit(TL_FILEERROR);
+		}
+
+		/*if(connectString.length() == 0) {
 			log( LOG_ERROR, "Connect string to DB is not found in ini-file. Exiting.");
 			ofsLog.close();
 			return TL_FILEERROR;
-		}
+		}*/
 
 		FILE *fTapFile=fopen(argv[1],"rb");
 		if(!fTapFile) {
@@ -1837,8 +1787,8 @@ int main(int argc, const char* argv[])
 		// DB connect
 		otl_connect::otl_initialize(); // initialize OCI environment
 		try {
-			otlConnect.rlogon(connectString.c_str());	
-			otlLogConnect.rlogon(connectString.c_str());	
+			otlConnect.rlogon(config.GetConnectString().c_str());	
+			otlLogConnect.rlogon(config.GetConnectString().c_str());	
 		}
 		catch (otl_exception &otlEx) {
 			log( LOG_ERROR, "Unable to connect to DB:" );
