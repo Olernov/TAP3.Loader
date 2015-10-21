@@ -1014,7 +1014,7 @@ int LoadTAPFileToDB( unsigned char* buffer, long dataLen, long fileID, bool bPri
 
 		// проверка наличия обязательных структур в Transfer Batch/Batch Control Information
 		// MOVED TO TAPValidator
-		TAPValidator tapValidator(otlConnect, config);
+		TAPValidator tapValidator(otlConnect, config, "RCRUS27NNN0100001", "TEST_ROAMING_HUB");
 		TAPValidationResult validationRes = tapValidator.Validate(dataInterchange);
 		// if(!dataInterchange->choice.transferBatch.batchControlInfo->sender  || !dataInterchange->choice.transferBatch.batchControlInfo->recipient ||
 		//	!dataInterchange->choice.transferBatch.batchControlInfo->fileSequenceNumber || 
