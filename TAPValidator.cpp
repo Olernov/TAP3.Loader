@@ -1,6 +1,7 @@
 // Class TAPValidator checks TAP file (DataInterchange structure) validity according to TD.57 requirements.
 // If Fatal or Severe errors are found it creates RAP file (Return Batch structure) and registers it in DB tables (RAP_File, RAP_Fatal_Return and so on).
 
+#include <math.h>
 #include "OTL_Header.h"
 #include "TAP_Constants.h"
 #include "DataInterchange.h"
@@ -13,6 +14,7 @@ using namespace std;
 
 extern void log(string filename, short msgType, string msgText);
 extern void log(short msgType, string msgText);
+extern long long OctetStr2Int64(const OCTET_STRING_t& octetStr);
 extern int write_out(const void *buffer, size_t size, void *app_key);
 extern "C" int ncftp_main(int argc, char **argv, char* result);
 
@@ -111,37 +113,104 @@ int TAPValidator::OctetString_fromInt64(OCTET_STRING& octetStr, long long value)
 	return 8 - i;
 }
 
-int TAPValidator::GetASNStructSize(asn_TYPE_descriptor_t *td, void *sptr)
+bool TAPValidator::BatchContainsTaxes()
 {
-	if(!td || !sptr)
-		return 0;
-
-	int size = 0;
-	for (int edx = 0; edx < td->elements_count; edx++) {
-		asn_TYPE_member_t *elm = &td->elements[edx];
-		void *memb_ptr;
-		if (elm->flags & ATF_POINTER) {
-			memb_ptr = *(void **) ( (char *) sptr + elm->memb_offset );
-			ASN__PRIMITIVE_TYPE_t* member_type = (ASN__PRIMITIVE_TYPE_t*) ( (char *) sptr + elm->memb_offset );
-			if (memb_ptr)
-				//ASN_STRUCT_FREE(*elm->type, memb_ptr);
-				size += _msize(memb_ptr);
-				//size += GetASNStructSize(elm->type, memb_ptr);
+	for (int call_index = 0; call_index < m_transferBatch->callEventDetails->list.count; call_index++) {
+		if(m_transferBatch->callEventDetails->list.array[call_index]->present == CallEventDetail_PR_mobileOriginatedCall) {
+			MobileOriginatedCall* moCall = &m_transferBatch->callEventDetails->list.array[call_index]->choice.mobileOriginatedCall;
+			for (int bs_used_index = 0; bs_used_index < moCall->basicServiceUsedList->list.count; bs_used_index++) 
+				for (int chr_index = 0; chr_index < moCall->basicServiceUsedList->list.array[bs_used_index]->chargeInformationList->list.count; chr_index++)
+					if (moCall->basicServiceUsedList->list.array[bs_used_index]->chargeInformationList->list.array[chr_index]->taxInformation != NULL)
+						return true;
 		}
-		else {
-			memb_ptr = (void *) ( (char *) sptr + elm->memb_offset );
-			ASN__PRIMITIVE_TYPE_t* member_type = (ASN__PRIMITIVE_TYPE_t*) ( (char *) sptr + elm->memb_offset );
-			//ASN_STRUCT_FREE_CONTENTS_ONLY(*elm->type, memb_ptr);
-			//size += GetASNStructSize(elm->type, memb_ptr);
-			size += member_type->size;
+		if(m_transferBatch->callEventDetails->list.array[call_index]->present == CallEventDetail_PR_mobileTerminatedCall) {
+			MobileTerminatedCall* mtCall = &m_transferBatch->callEventDetails->list.array[call_index]->choice.mobileTerminatedCall;
+			for (int bs_used_index = 0; bs_used_index < mtCall->basicServiceUsedList->list.count; bs_used_index++) 
+				for (int chr_index = 0; chr_index < mtCall->basicServiceUsedList->list.array[bs_used_index]->chargeInformationList->list.count; chr_index++)
+					if (mtCall->basicServiceUsedList->list.array[bs_used_index]->chargeInformationList->list.array[chr_index]->taxInformation != NULL)
+						return true;
+		}
+		if(m_transferBatch->callEventDetails->list.array[call_index]->present == CallEventDetail_PR_gprsCall) {
+			GprsCall* gprsCall = &m_transferBatch->callEventDetails->list.array[call_index]->choice.gprsCall;
+			for (int chr_index = 0; chr_index < gprsCall->gprsServiceUsed->chargeInformationList->list.count; chr_index++)
+				if (gprsCall->gprsServiceUsed->chargeInformationList->list.array[chr_index]->taxInformation != NULL)
+					return true;
 		}
 	}
-	return size;
+	return false;
 }
 
+bool TAPValidator::BatchContainsDiscounts()
+{
+	for (int call_index = 0; call_index < m_transferBatch->callEventDetails->list.count; call_index++) {
+		if(m_transferBatch->callEventDetails->list.array[call_index]->present == CallEventDetail_PR_mobileOriginatedCall) {
+			MobileOriginatedCall* moCall = &m_transferBatch->callEventDetails->list.array[call_index]->choice.mobileOriginatedCall;
+			for (int bs_used_index = 0; bs_used_index < moCall->basicServiceUsedList->list.count; bs_used_index++) 
+				for (int chr_index = 0; chr_index < moCall->basicServiceUsedList->list.array[bs_used_index]->chargeInformationList->list.count; chr_index++)
+					if (moCall->basicServiceUsedList->list.array[bs_used_index]->chargeInformationList->list.array[chr_index]->discountInformation != NULL)
+						return true;
+		}
+		if(m_transferBatch->callEventDetails->list.array[call_index]->present == CallEventDetail_PR_mobileTerminatedCall) {
+			MobileTerminatedCall* mtCall = &m_transferBatch->callEventDetails->list.array[call_index]->choice.mobileTerminatedCall;
+			for (int bs_used_index = 0; bs_used_index < mtCall->basicServiceUsedList->list.count; bs_used_index++) 
+				for (int chr_index = 0; chr_index < mtCall->basicServiceUsedList->list.array[bs_used_index]->chargeInformationList->list.count; chr_index++)
+					if (mtCall->basicServiceUsedList->list.array[bs_used_index]->chargeInformationList->list.array[chr_index]->discountInformation != NULL)
+						return true;
+		}
+		if(m_transferBatch->callEventDetails->list.array[call_index]->present == CallEventDetail_PR_gprsCall) {
+			GprsCall* gprsCall = &m_transferBatch->callEventDetails->list.array[call_index]->choice.gprsCall;
+			for (int chr_index = 0; chr_index < gprsCall->gprsServiceUsed->chargeInformationList->list.count; chr_index++)
+				if (gprsCall->gprsServiceUsed->chargeInformationList->list.array[chr_index]->discountInformation != NULL)
+					return true;
+		}
+	}
+	return false;
+}
 
+bool TAPValidator::ChargeInfoContainsPositiveCharges(ChargeInformation* chargeInfo)
+{
+	double tapPower = pow( (double) 10, *m_transferBatch->accountingInfo->tapDecimalPlaces);
+	for (int chr_det_index = 0; chr_det_index < chargeInfo->chargeDetailList->list.count; chr_det_index++) {
+		double charge = OctetStr2Int64(*chargeInfo->chargeDetailList->list.array[chr_det_index]->charge) / tapPower;
+		if (charge > 0)
+			return true;
+	}
+	return false;
+}
 
-ReturnBatch* TAPValidator::FillReturnBatch(const TransferBatch& transferBatch, ReturnDetail* returnDetail)
+bool TAPValidator::BatchContainsPositiveCharges()
+{
+	
+	for (int call_index = 0; call_index < m_transferBatch->callEventDetails->list.count; call_index++) {
+		if(m_transferBatch->callEventDetails->list.array[call_index]->present == CallEventDetail_PR_mobileOriginatedCall) {
+			MobileOriginatedCall* moCall = &m_transferBatch->callEventDetails->list.array[call_index]->choice.mobileOriginatedCall;
+			for (int bs_used_index = 0; bs_used_index < moCall->basicServiceUsedList->list.count; bs_used_index++)
+				for (int chr_index = 0; chr_index < moCall->basicServiceUsedList->list.array[bs_used_index]->chargeInformationList->list.count; chr_index++)
+					if (ChargeInfoContainsPositiveCharges(
+							moCall->basicServiceUsedList->list.array[bs_used_index]->chargeInformationList->list.array[chr_index]))
+						return true;
+		}
+		
+		if(m_transferBatch->callEventDetails->list.array[call_index]->present == CallEventDetail_PR_mobileTerminatedCall) {
+			MobileTerminatedCall* mtCall = &m_transferBatch->callEventDetails->list.array[call_index]->choice.mobileTerminatedCall;
+			for (int bs_used_index = 0; bs_used_index < mtCall->basicServiceUsedList->list.count; bs_used_index++) 
+				for (int chr_index = 0; chr_index < mtCall->basicServiceUsedList->list.array[bs_used_index]->chargeInformationList->list.count; chr_index++) 
+					if (ChargeInfoContainsPositiveCharges(
+							mtCall->basicServiceUsedList->list.array[bs_used_index]->chargeInformationList->list.array[chr_index]))
+						return true;
+		}
+		if(m_transferBatch->callEventDetails->list.array[call_index]->present == CallEventDetail_PR_gprsCall) {
+			GprsCall* gprsCall = &m_transferBatch->callEventDetails->list.array[call_index]->choice.gprsCall;
+			for (int chr_index = 0; chr_index < gprsCall->gprsServiceUsed->chargeInformationList->list.count; chr_index++)
+				if (ChargeInfoContainsPositiveCharges(
+						gprsCall->gprsServiceUsed->chargeInformationList->list.array[chr_index]))
+					return true;
+		}
+	}
+	return false;
+}
+
+ReturnBatch* TAPValidator::FillReturnBatch(ReturnDetail* returnDetail)
 {
 // TODO: get this params from DB
 		string rapSequenceNumber = "00001"; 
@@ -157,10 +226,10 @@ ReturnBatch* TAPValidator::FillReturnBatch(const TransferBatch& transferBatch, R
 	ReturnBatch* returnBatch = (ReturnBatch*) calloc(1, sizeof(ReturnBatch));
 
 	// sender and recipient switch their places
-	OCTET_STRING_fromBuf(&returnBatch->rapBatchControlInfoRap.sender, (const char*) transferBatch.batchControlInfo->sender->buf,
-		transferBatch.batchControlInfo->recipient->size);
-	OCTET_STRING_fromBuf(&returnBatch->rapBatchControlInfoRap.recipient, (const char*) transferBatch.batchControlInfo->recipient->buf,
-		transferBatch.batchControlInfo->recipient->size);
+	OCTET_STRING_fromBuf(&returnBatch->rapBatchControlInfoRap.sender, (const char*) m_transferBatch->batchControlInfo->sender->buf,
+		m_transferBatch->batchControlInfo->recipient->size);
+	OCTET_STRING_fromBuf(&returnBatch->rapBatchControlInfoRap.recipient, (const char*) m_transferBatch->batchControlInfo->recipient->buf,
+		m_transferBatch->batchControlInfo->recipient->size);
 
 	OCTET_STRING_fromBuf(&returnBatch->rapBatchControlInfoRap.rapFileSequenceNumber, rapSequenceNumber.c_str(), rapSequenceNumber.size());
 	returnBatch->rapBatchControlInfoRap.rapFileCreationTimeStamp.localTimeStamp =
@@ -184,10 +253,10 @@ ReturnBatch* TAPValidator::FillReturnBatch(const TransferBatch& transferBatch, R
 	returnBatch->rapBatchControlInfoRap.releaseVersionNumber = (ReleaseVersionNumber_t*) calloc(1, sizeof(ReleaseVersionNumber_t));
 	*returnBatch->rapBatchControlInfoRap.releaseVersionNumber = tapRelease;
 			
-	if (transferBatch.batchControlInfo->fileTypeIndicator)
+	if (m_transferBatch->batchControlInfo->fileTypeIndicator)
 		returnBatch->rapBatchControlInfoRap.fileTypeIndicator = OCTET_STRING_new_fromBuf(&asn_DEF_FileTypeIndicator, 
-			(const char*)transferBatch.batchControlInfo->fileTypeIndicator->buf, 
-			transferBatch.batchControlInfo->fileTypeIndicator->size);
+			(const char*)m_transferBatch->batchControlInfo->fileTypeIndicator->buf, 
+			m_transferBatch->batchControlInfo->fileTypeIndicator->size);
 		
 // TODO: Operator specific info is mandatory for IOT errors (TD.52 RAP implementation handbook)
 // Fill it for Severe errors
@@ -202,50 +271,64 @@ ReturnBatch* TAPValidator::FillReturnBatch(const TransferBatch& transferBatch, R
 }
 
 
-//ReturnDetail* TAPValidator::CreateTransferBatchError(const TransferBatch& transferBatch, int errorCode)
-//{
-//	ReturnDetail* returnDetail = (ReturnDetail*) calloc(1, sizeof(ReturnDetail));
-//	returnDetail->present = ReturnDetail_PR_fatalReturn;
-//	memcpy(&returnDetail->choice.fatalReturn.fileSequenceNumber, transferBatch.batchControlInfo->fileSequenceNumber,
-//		transferBatch.batchControlInfo->fileSequenceNumber->size);
-//	returnDetail->choice.fatalReturn.transferBatchError = (TransferBatchError*) calloc(1, sizeof(TransferBatchError));
-//	ErrorDetail* errorDetail = (ErrorDetail*) calloc(1, sizeof(ErrorDetail));
-//	errorDetail->errorCode = errorCode;
-//
-//	// Fill Error Context List
-//	errorDetail->errorContext = (ErrorContextList*) calloc(1, sizeof(ErrorContextList));
-//	ErrorContext* errorContext1level = (ErrorContext*) calloc(1, sizeof(ErrorContext));
-//	errorContext1level->pathItemId = asn_DEF_TransferBatch.tags[0] >> 2; // 2 rightmost bits is TAG class at ASN1 compiler, remove it
-//	errorContext1level->itemLevel = 1;
-//	ASN_SEQUENCE_ADD(errorDetail->errorContext, errorContext1level);
-//	ASN_SEQUENCE_ADD(&returnDetail->choice.fatalReturn.transferBatchError->errorDetail, errorDetail);
-//
-//	return returnDetail;
-//}
-
-
-ReturnDetail* TAPValidator::CreateBatchControlInfoError(const TransferBatch& transferBatch, int errorCode)
+int TAPValidator::CreateTransferBatchRAPFile(string logMessage, int errorCode)
 {
+	log(LOG_ERROR, "Validation: " + logMessage + ". Creating RAP file " + m_rapFilename);
 	ReturnDetail* returnDetail = (ReturnDetail*) calloc(1, sizeof(ReturnDetail));
 	returnDetail->present = ReturnDetail_PR_fatalReturn;
-	/*memcpy(&returnDetail->choice.fatalReturn.fileSequenceNumber, transferBatch.batchControlInfo->fileSequenceNumber,
-		GetASNStructSize(&asn_DEF_BatchControlInfo, transferBatch.batchControlInfo));*/
+	OCTET_STRING_fromBuf(&returnDetail->choice.fatalReturn.fileSequenceNumber, (const char*)m_transferBatch->batchControlInfo->fileSequenceNumber->buf, 
+		m_transferBatch->batchControlInfo->fileSequenceNumber->size);
+	returnDetail->choice.fatalReturn.transferBatchError = (TransferBatchError*) calloc(1, sizeof(TransferBatchError));
+	ErrorDetail* errorDetail = (ErrorDetail*) calloc(1, sizeof(ErrorDetail));
+	errorDetail->errorCode = errorCode;
+
+	// Fill Error Context List
+	errorDetail->errorContext = (ErrorContextList*) calloc(1, sizeof(ErrorContextList));
+	ErrorContext* errorContext1level = (ErrorContext*) calloc(1, sizeof(ErrorContext));
+	errorContext1level->pathItemId = asn_DEF_TransferBatch.tags[0] >> 2; // 2 rightmost bits is TAG class at ASN1 compiler, remove it
+	errorContext1level->itemLevel = 1;
+	ASN_SEQUENCE_ADD(errorDetail->errorContext, errorContext1level);
+	ASN_SEQUENCE_ADD(&returnDetail->choice.fatalReturn.transferBatchError->errorDetail, errorDetail);
+	
+	ReturnBatch* returnBatch = FillReturnBatch(returnDetail);
+	int encodeAndUploadRes = EncodeAndUpload(m_rapFilename, "RAP file", &asn_DEF_ReturnBatch, returnBatch);
+	ASN_STRUCT_FREE(asn_DEF_ReturnBatch, returnBatch);
+	return encodeAndUploadRes;
+}
+
+int TAPValidator::CreateBatchControlInfoRAPFile(string logMessage, int errorCode)
+{
+	log(LOG_ERROR, "Validation: " + logMessage + ". Creating RAP file " + m_rapFilename);
+	ReturnDetail* returnDetail = (ReturnDetail*) calloc(1, sizeof(ReturnDetail));
+	returnDetail->present = ReturnDetail_PR_fatalReturn;
+	OCTET_STRING_fromBuf(&returnDetail->choice.fatalReturn.fileSequenceNumber, 
+		(const char*) m_transferBatch->batchControlInfo->fileSequenceNumber->buf, 
+		m_transferBatch->batchControlInfo->fileSequenceNumber->size);
 	returnDetail->choice.fatalReturn.batchControlError = (BatchControlError*) calloc(1, sizeof(BatchControlError));
-	long s = GetASNStructSize(&asn_DEF_BatchControlInfo, transferBatch.batchControlInfo);
-	s = GetASNStructSize(&asn_DEF_TransferBatch, (void*) &transferBatch);
 	
 	//Copy batchControlInfo fields to Return Batch structure
-	returnDetail->choice.fatalReturn.batchControlError->batchControlInfo.sender = transferBatch.batchControlInfo->sender;
-	returnDetail->choice.fatalReturn.batchControlError->batchControlInfo.recipient = transferBatch.batchControlInfo->recipient;
-	returnDetail->choice.fatalReturn.batchControlError->batchControlInfo.fileAvailableTimeStamp = transferBatch.batchControlInfo->fileAvailableTimeStamp;
-	returnDetail->choice.fatalReturn.batchControlError->batchControlInfo.fileCreationTimeStamp = transferBatch.batchControlInfo->fileCreationTimeStamp;
-	returnDetail->choice.fatalReturn.batchControlError->batchControlInfo.transferCutOffTimeStamp = transferBatch.batchControlInfo->transferCutOffTimeStamp;
-	returnDetail->choice.fatalReturn.batchControlError->batchControlInfo.fileSequenceNumber = transferBatch.batchControlInfo->fileSequenceNumber;
-	returnDetail->choice.fatalReturn.batchControlError->batchControlInfo.fileTypeIndicator = transferBatch.batchControlInfo->fileTypeIndicator;
-	returnDetail->choice.fatalReturn.batchControlError->batchControlInfo.operatorSpecInformation = transferBatch.batchControlInfo->operatorSpecInformation;
-	returnDetail->choice.fatalReturn.batchControlError->batchControlInfo.rapFileSequenceNumber = transferBatch.batchControlInfo->rapFileSequenceNumber;
-	returnDetail->choice.fatalReturn.batchControlError->batchControlInfo.releaseVersionNumber = transferBatch.batchControlInfo->releaseVersionNumber;
-	returnDetail->choice.fatalReturn.batchControlError->batchControlInfo.specificationVersionNumber = transferBatch.batchControlInfo->specificationVersionNumber;
+	returnDetail->choice.fatalReturn.batchControlError->batchControlInfo.sender =
+		m_transferBatch->batchControlInfo->sender;
+	returnDetail->choice.fatalReturn.batchControlError->batchControlInfo.recipient = 
+		m_transferBatch->batchControlInfo->recipient;
+	returnDetail->choice.fatalReturn.batchControlError->batchControlInfo.fileAvailableTimeStamp = 
+		m_transferBatch->batchControlInfo->fileAvailableTimeStamp;
+	returnDetail->choice.fatalReturn.batchControlError->batchControlInfo.fileCreationTimeStamp = 
+		m_transferBatch->batchControlInfo->fileCreationTimeStamp;
+	returnDetail->choice.fatalReturn.batchControlError->batchControlInfo.transferCutOffTimeStamp = 
+		m_transferBatch->batchControlInfo->transferCutOffTimeStamp;
+	returnDetail->choice.fatalReturn.batchControlError->batchControlInfo.fileSequenceNumber = 
+		m_transferBatch->batchControlInfo->fileSequenceNumber;
+	returnDetail->choice.fatalReturn.batchControlError->batchControlInfo.fileTypeIndicator = 
+		m_transferBatch->batchControlInfo->fileTypeIndicator;
+	returnDetail->choice.fatalReturn.batchControlError->batchControlInfo.operatorSpecInformation = 
+		m_transferBatch->batchControlInfo->operatorSpecInformation;
+	returnDetail->choice.fatalReturn.batchControlError->batchControlInfo.rapFileSequenceNumber = 
+		m_transferBatch->batchControlInfo->rapFileSequenceNumber;
+	returnDetail->choice.fatalReturn.batchControlError->batchControlInfo.releaseVersionNumber = 
+		m_transferBatch->batchControlInfo->releaseVersionNumber;
+	returnDetail->choice.fatalReturn.batchControlError->batchControlInfo.specificationVersionNumber = 
+		m_transferBatch->batchControlInfo->specificationVersionNumber;
 	
 	ErrorDetail* errorDetail = (ErrorDetail*) calloc(1, sizeof(ErrorDetail));
 	errorDetail->errorCode = errorCode;
@@ -261,135 +344,207 @@ ReturnDetail* TAPValidator::CreateBatchControlInfoError(const TransferBatch& tra
 	errorContext2level->pathItemId = asn_DEF_BatchControlInfo.tags[0] >> 2; // 2 rightmost bits is TAG class at ASN1 compiler, remove it  
 	errorContext2level->itemLevel = 2;
 	ASN_SEQUENCE_ADD(errorDetail->errorContext, errorContext2level);
-
 	ASN_SEQUENCE_ADD(&returnDetail->choice.fatalReturn.batchControlError->errorDetail, errorDetail);
 
-	return returnDetail;
+	ReturnBatch* returnBatch = FillReturnBatch(returnDetail);
+	int encodeAndUploadRes = EncodeAndUpload(m_rapFilename, "RAP file", &asn_DEF_ReturnBatch, returnBatch);
+	
+	// Clear previously copied pointers to avoid ASN_STRUCT_FREE errors
+	returnDetail->choice.fatalReturn.batchControlError->batchControlInfo.sender = NULL;
+	returnDetail->choice.fatalReturn.batchControlError->batchControlInfo.recipient = NULL;
+	returnDetail->choice.fatalReturn.batchControlError->batchControlInfo.fileAvailableTimeStamp = NULL;
+	returnDetail->choice.fatalReturn.batchControlError->batchControlInfo.fileCreationTimeStamp = NULL;
+	returnDetail->choice.fatalReturn.batchControlError->batchControlInfo.transferCutOffTimeStamp = NULL;
+	returnDetail->choice.fatalReturn.batchControlError->batchControlInfo.fileSequenceNumber = NULL;
+	returnDetail->choice.fatalReturn.batchControlError->batchControlInfo.fileTypeIndicator = NULL;
+	returnDetail->choice.fatalReturn.batchControlError->batchControlInfo.operatorSpecInformation = NULL;
+	returnDetail->choice.fatalReturn.batchControlError->batchControlInfo.rapFileSequenceNumber = NULL;
+	returnDetail->choice.fatalReturn.batchControlError->batchControlInfo.releaseVersionNumber = NULL;
+	returnDetail->choice.fatalReturn.batchControlError->batchControlInfo.specificationVersionNumber = NULL;
+	ASN_STRUCT_FREE(asn_DEF_ReturnBatch, returnBatch);
+
+	return encodeAndUploadRes;
 }
 
-int TAPValidator::CreateTransferBatchRAPFile(string logMessage, const TransferBatch& transferBatch, int errorCode)
+
+int TAPValidator::CreateAccountingInfoRAPFile(string logMessage, int errorCode)
 {
 	log(LOG_ERROR, "Validation: " + logMessage + ". Creating RAP file " + m_rapFilename);
-	//ReturnDetail* returnDetail = CreateTransferBatchError(transferBatch, errorCode);
-
 	ReturnDetail* returnDetail = (ReturnDetail*) calloc(1, sizeof(ReturnDetail));
 	returnDetail->present = ReturnDetail_PR_fatalReturn;
-	OCTET_STRING_fromBuf(&returnDetail->choice.fatalReturn.fileSequenceNumber, (const char*)transferBatch.batchControlInfo->fileSequenceNumber->buf, 
-		transferBatch.batchControlInfo->fileSequenceNumber->size);
-	//memcpy(&returnDetail->choice.fatalReturn.fileSequenceNumber, transferBatch.batchControlInfo->fileSequenceNumber,
-	//	transferBatch.batchControlInfo->fileSequenceNumber->size);
-	returnDetail->choice.fatalReturn.transferBatchError = (TransferBatchError*) calloc(1, sizeof(TransferBatchError));
+	OCTET_STRING_fromBuf(&returnDetail->choice.fatalReturn.fileSequenceNumber, (const char*) m_transferBatch->batchControlInfo->fileSequenceNumber->buf, 
+		m_transferBatch->batchControlInfo->fileSequenceNumber->size);
+	returnDetail->choice.fatalReturn.accountingInfoError = (AccountingInfoError*) calloc(1, sizeof(AccountingInfoError));
+	
+	//Copy AccountingInfo fields to Return Batch structure
+	returnDetail->choice.fatalReturn.accountingInfoError->accountingInfo.currencyConversionInfo = 
+		m_transferBatch->accountingInfo->currencyConversionInfo;
+	returnDetail->choice.fatalReturn.accountingInfoError->accountingInfo.discounting = 
+		m_transferBatch->accountingInfo->discounting;
+	returnDetail->choice.fatalReturn.accountingInfoError->accountingInfo.localCurrency = 
+		m_transferBatch->accountingInfo->localCurrency;
+	returnDetail->choice.fatalReturn.accountingInfoError->accountingInfo.tapCurrency = 
+		m_transferBatch->accountingInfo->tapCurrency;
+	returnDetail->choice.fatalReturn.accountingInfoError->accountingInfo.tapDecimalPlaces = 
+		m_transferBatch->accountingInfo->tapDecimalPlaces;
+	returnDetail->choice.fatalReturn.accountingInfoError->accountingInfo.taxation = 
+		m_transferBatch->accountingInfo->taxation;
+		
 	ErrorDetail* errorDetail = (ErrorDetail*) calloc(1, sizeof(ErrorDetail));
 	errorDetail->errorCode = errorCode;
 
 	// Fill Error Context List
 	errorDetail->errorContext = (ErrorContextList*) calloc(1, sizeof(ErrorContextList));
 	ErrorContext* errorContext1level = (ErrorContext*) calloc(1, sizeof(ErrorContext));
-	errorContext1level->pathItemId = asn_DEF_TransferBatch.tags[0] >> 2; // 2 rightmost bits is TAG class at ASN1 compiler, remove it
+	errorContext1level->pathItemId = asn_DEF_TransferBatch.tags[0] >> 2; // 2 rightmost bits is TAG class at ASN1 compiler, remove it  
 	errorContext1level->itemLevel = 1;
 	ASN_SEQUENCE_ADD(errorDetail->errorContext, errorContext1level);
-	ASN_SEQUENCE_ADD(&returnDetail->choice.fatalReturn.transferBatchError->errorDetail, errorDetail);
-	
-	ReturnBatch* returnBatch = FillReturnBatch(transferBatch, returnDetail);
+
+	ErrorContext* errorContext2level = (ErrorContext*) calloc(1, sizeof(ErrorContext));
+	errorContext2level->pathItemId = asn_DEF_AccountingInfo.tags[0] >> 2; // 2 rightmost bits is TAG class at ASN1 compiler, remove it  
+	errorContext2level->itemLevel = 2;
+	ASN_SEQUENCE_ADD(errorDetail->errorContext, errorContext2level);
+	ASN_SEQUENCE_ADD(&returnDetail->choice.fatalReturn.accountingInfoError->errorDetail, errorDetail);
+
+	ReturnBatch* returnBatch = FillReturnBatch(returnDetail);
 	int encodeAndUploadRes = EncodeAndUpload(m_rapFilename, "RAP file", &asn_DEF_ReturnBatch, returnBatch);
+	
+	// Clear previously copied pointers to avoid ASN_STRUCT_FREE errors
+	returnDetail->choice.fatalReturn.accountingInfoError->accountingInfo.currencyConversionInfo = NULL;
+	returnDetail->choice.fatalReturn.accountingInfoError->accountingInfo.discounting = NULL;
+	returnDetail->choice.fatalReturn.accountingInfoError->accountingInfo.localCurrency = NULL;
+	returnDetail->choice.fatalReturn.accountingInfoError->accountingInfo.tapCurrency = NULL;
+	returnDetail->choice.fatalReturn.accountingInfoError->accountingInfo.tapDecimalPlaces = NULL;
+	returnDetail->choice.fatalReturn.accountingInfoError->accountingInfo.taxation = NULL;
 	ASN_STRUCT_FREE(asn_DEF_ReturnBatch, returnBatch);
+
 	return encodeAndUploadRes;
 }
 
-int TAPValidator::CreateBatchControlInfoRAPFile(string logMessage, const TransferBatch& transferBatch, int errorCode)
+
+int TAPValidator::CreateNetworkInfoRAPFile(string logMessage, int errorCode)
 {
-	log(LOG_ERROR, "Validation: fileAvailableTimeStamp is missing in Batch Control Info. Creating RAP file.");
-	
 	log(LOG_ERROR, "Validation: " + logMessage + ". Creating RAP file " + m_rapFilename);
-	ReturnDetail* returnDetail = CreateBatchControlInfoError(transferBatch, BATCH_CTRL_FILE_AVAIL_TIMESTAMP_MISSING);
-	ReturnBatch* returnBatch = FillReturnBatch(transferBatch, returnDetail);
+	ReturnDetail* returnDetail = (ReturnDetail*) calloc(1, sizeof(ReturnDetail));
+	returnDetail->present = ReturnDetail_PR_fatalReturn;
+	OCTET_STRING_fromBuf(&returnDetail->choice.fatalReturn.fileSequenceNumber, (const char*) m_transferBatch->batchControlInfo->fileSequenceNumber->buf, 
+		m_transferBatch->batchControlInfo->fileSequenceNumber->size);
+	returnDetail->choice.fatalReturn.networkInfoError = (NetworkInfoError*) calloc(1, sizeof(NetworkInfoError));
+	
+	//Copy NetworkInfo fields to Return Batch structure
+	returnDetail->choice.fatalReturn.networkInfoError->networkInfo.recEntityInfo = 
+		m_transferBatch->networkInfo->recEntityInfo;
+	returnDetail->choice.fatalReturn.networkInfoError->networkInfo.utcTimeOffsetInfo = 
+		m_transferBatch->networkInfo->utcTimeOffsetInfo;
+		
+	ErrorDetail* errorDetail = (ErrorDetail*) calloc(1, sizeof(ErrorDetail));
+	errorDetail->errorCode = errorCode;
+
+	// Fill Error Context List
+	errorDetail->errorContext = (ErrorContextList*) calloc(1, sizeof(ErrorContextList));
+	ErrorContext* errorContext1level = (ErrorContext*) calloc(1, sizeof(ErrorContext));
+	errorContext1level->pathItemId = asn_DEF_TransferBatch.tags[0] >> 2; // 2 rightmost bits is TAG class at ASN1 compiler, remove it  
+	errorContext1level->itemLevel = 1;
+	ASN_SEQUENCE_ADD(errorDetail->errorContext, errorContext1level);
+
+	ErrorContext* errorContext2level = (ErrorContext*) calloc(1, sizeof(ErrorContext));
+	errorContext2level->pathItemId = asn_DEF_NetworkInfo.tags[0] >> 2; // 2 rightmost bits is TAG class at ASN1 compiler, remove it  
+	errorContext2level->itemLevel = 2;
+	ASN_SEQUENCE_ADD(errorDetail->errorContext, errorContext2level);
+	ASN_SEQUENCE_ADD(&returnDetail->choice.fatalReturn.networkInfoError->errorDetail, errorDetail);
+
+	ReturnBatch* returnBatch = FillReturnBatch(returnDetail);
 	int encodeAndUploadRes = EncodeAndUpload(m_rapFilename, "RAP file", &asn_DEF_ReturnBatch, returnBatch);
-	// Unable to call ASN_STRUCT_FREE 'cause we copy pointers from original Transfer Batch to Return Batch structure. 
-	// Some memory leak here but not critical 'cause we create one only RAP file at a time.
-	// ASN_STRUCT_FREE(asn_DEF_ReturnBatch, returnBatch);
+	
+	// Clear previously copied pointers to avoid ASN_STRUCT_FREE errors
+	returnDetail->choice.fatalReturn.networkInfoError->networkInfo.recEntityInfo = NULL;
+	returnDetail->choice.fatalReturn.networkInfoError->networkInfo.utcTimeOffsetInfo = NULL;
+	ASN_STRUCT_FREE(asn_DEF_ReturnBatch, returnBatch);
+
 	return encodeAndUploadRes;
 }
 
 
-TAPValidationResult TAPValidator::ValidateTransferBatch(const TransferBatch& transferBatch)
+TAPValidationResult TAPValidator::ValidateTransferBatch()
 {
 	// check mandatory structures in Transfer Batch
-	if (!transferBatch.batchControlInfo) {
-		CreateTransferBatchRAPFile("Batch Control Info missing in Transfer Batch", transferBatch, TF_BATCH_BATCH_CONTROL_INFO_MISSING);
-		/*log(LOG_ERROR, "Validation: Batch Control Info missing in Transfer Batch. Creating RAP file " + m_rapFilename);
-		ReturnDetail* returnDetail = CreateTransferBatchError(transferBatch, TF_BATCH_BATCH_CONTROL_INFO_MISSING);
-		ReturnBatch* returnBatch = FillReturnBatch(transferBatch, returnDetail);
-		int encodeAndUploadRes = EncodeAndUpload(m_rapFilename, "RAP file", &asn_DEF_ReturnBatch, returnBatch);
-		ASN_STRUCT_FREE(asn_DEF_ReturnBatch, returnBatch);*/
+	if (!m_transferBatch->batchControlInfo) {
+		CreateTransferBatchRAPFile("Batch Control Info missing in Transfer Batch", TF_BATCH_BATCH_CONTROL_INFO_MISSING);
 		return FATAL_ERROR;
 	}
-	if (!transferBatch.accountingInfo) {
-		CreateTransferBatchRAPFile("Accounting Info missing in Transfer Batch", transferBatch, TF_BATCH_ACCOUNTING_INFO_MISSING);
-
-		/*log(LOG_ERROR, "Validation: Accounting Info missing in Transfer Batch. Creating RAP file " + m_rapFilename);
-		ReturnDetail* returnDetail = CreateTransferBatchError(transferBatch, TF_BATCH_ACCOUNTING_INFO_MISSING);
-		ReturnBatch* returnBatch = FillReturnBatch(transferBatch, returnDetail);
-		int encodeAndUploadRes = EncodeAndUpload(m_rapFilename, "RAP file", &asn_DEF_ReturnBatch, returnBatch);
-		ASN_STRUCT_FREE(asn_DEF_ReturnBatch, returnBatch);*/
+	if (!m_transferBatch->accountingInfo) {
+		CreateTransferBatchRAPFile("Accounting Info missing in Transfer Batch", TF_BATCH_ACCOUNTING_INFO_MISSING);
 		return FATAL_ERROR;
 	}
-	if (!transferBatch.networkInfo) {
-		CreateTransferBatchRAPFile("Network Info missing in Transfer Batch", transferBatch, TF_BATCH_NETWORK_INFO_MISSING);
-
-		/*log(LOG_ERROR, "Validation: Network Info missing in Transfer Batch. Creating RAP file " + m_rapFilename);
-		ReturnDetail* returnDetail = CreateTransferBatchError(transferBatch, TF_BATCH_NETWORK_INFO_MISSING);
-		ReturnBatch* returnBatch = FillReturnBatch(transferBatch, returnDetail);
-		int encodeAndUploadRes = EncodeAndUpload(m_rapFilename, "RAP file", &asn_DEF_ReturnBatch, returnBatch);
-		ASN_STRUCT_FREE(asn_DEF_ReturnBatch, returnBatch);*/
+	if (!m_transferBatch->networkInfo) {
+		CreateTransferBatchRAPFile("Network Info missing in Transfer Batch", TF_BATCH_NETWORK_INFO_MISSING);
 		return FATAL_ERROR;
 	}
-	if (!transferBatch.auditControlInfo) {
-		CreateTransferBatchRAPFile("Audit Control Info missing in Transfer Batch", transferBatch, TF_BATCH_AUDIT_CONTROL_INFO_MISSING);
-
-		/*log(LOG_ERROR, "Validation: Audit Control Info missing in Transfer Batch. Creating RAP file " + m_rapFilename);
-		ReturnDetail* returnDetail = CreateTransferBatchError(transferBatch, TF_BATCH_AUDIT_CONTROL_INFO_MISSING);
-		ReturnBatch* returnBatch = FillReturnBatch(transferBatch, returnDetail);
-		int encodeAndUploadRes = EncodeAndUpload(m_rapFilename, "RAP file", &asn_DEF_ReturnBatch, returnBatch);
-		ASN_STRUCT_FREE(asn_DEF_ReturnBatch, returnBatch);*/
+	if (!m_transferBatch->auditControlInfo) {
+		CreateTransferBatchRAPFile("Audit Control Info missing in Transfer Batch", TF_BATCH_AUDIT_CONTROL_INFO_MISSING);
 		return FATAL_ERROR;
 	}
 		
 	// check mandatory structures in Transfer Batch/Batch Control Information
-	if (!transferBatch.batchControlInfo->sender || !transferBatch.batchControlInfo->recipient || !transferBatch.batchControlInfo->fileSequenceNumber) {
+	if (!m_transferBatch->batchControlInfo->sender || !m_transferBatch->batchControlInfo->recipient || !m_transferBatch->batchControlInfo->fileSequenceNumber) {
 		log(LOG_ERROR, "Validation: Sender, Recipient or FileSequenceNumber is missing in Batch Control Info. Unable to create RAP file.");
 		return VALIDATION_IMPOSSIBLE;
 	}
 
-	if (!transferBatch.batchControlInfo->fileAvailableTimeStamp) {
-		log(LOG_ERROR, "Validation: fileAvailableTimeStamp is missing in Batch Control Info. Creating RAP file.");
-		ReturnDetail* returnDetail = CreateBatchControlInfoError(transferBatch, BATCH_CTRL_FILE_AVAIL_TIMESTAMP_MISSING);
-		ReturnBatch* returnBatch = FillReturnBatch(transferBatch, returnDetail);
-		int encodeAndUploadRes = EncodeAndUpload(m_rapFilename, "RAP file", &asn_DEF_ReturnBatch, returnBatch);
-		// Unable to call ASN_STRUCT_FREE 'cause we copy pointers from original Transfer Batch to Return Batch structure. 
-		// Some memory leak here but not critical 'cause we create one only RAP file at a time.
-		// ASN_STRUCT_FREE(asn_DEF_ReturnBatch, returnBatch);
+	if (!m_transferBatch->batchControlInfo->fileAvailableTimeStamp) {
+		CreateBatchControlInfoRAPFile("fileAvailableTimeStamp is missing in Batch Control Info", BATCH_CTRL_FILE_AVAIL_TIMESTAMP_MISSING);
 		return FATAL_ERROR;
 	}
-	if (!transferBatch.batchControlInfo->specificationVersionNumber) {
-		log(LOG_ERROR, "Validation: specificationVersionNumber is missing in Batch Control Info. Creating RAP file.");
-		ReturnDetail* returnDetail = CreateBatchControlInfoError(transferBatch, BATCH_CTRL_SPEC_VERSION_MISSING);
-		ReturnBatch* returnBatch = FillReturnBatch(transferBatch, returnDetail);
-		int encodeAndUploadRes = EncodeAndUpload(m_rapFilename, "RAP file", &asn_DEF_ReturnBatch, returnBatch);
+	if (!m_transferBatch->batchControlInfo->specificationVersionNumber) {
+		CreateBatchControlInfoRAPFile("specificationVersionNumber is missing in Batch Control Info", BATCH_CTRL_SPEC_VERSION_MISSING);
 		return FATAL_ERROR;
 	}
-	if (!transferBatch.batchControlInfo->transferCutOffTimeStamp) {
-		log(LOG_ERROR, "Validation: transferCutOffTimeStamp is missing in Batch Control Info. Creating RAP file.");
-		ReturnDetail* returnDetail = CreateBatchControlInfoError(transferBatch, BATCH_CTRL_TRANSFER_CUTOFF_MISSING);
-		ReturnBatch* returnBatch = FillReturnBatch(transferBatch, returnDetail);
-		int encodeAndUploadRes = EncodeAndUpload(m_rapFilename, "RAP file", &asn_DEF_ReturnBatch, returnBatch);
+	if (!m_transferBatch->batchControlInfo->transferCutOffTimeStamp) {
+		CreateBatchControlInfoRAPFile("transferCutOffTimeStamp is missing in Batch Control Info", BATCH_CTRL_TRANSFER_CUTOFF_MISSING);
 		return FATAL_ERROR;
 	}
-	
+
+	// check mandatory structures in Transfer Batch/Accounting Information
+	if (!m_transferBatch->accountingInfo->localCurrency) {
+		CreateAccountingInfoRAPFile("localCurrency is missing in Accounting Info", ACCOUNTING_LOCAL_CURRENCY_MISSING);
+		return FATAL_ERROR;
+	}
+	if (!m_transferBatch->accountingInfo->tapDecimalPlaces) {
+		CreateAccountingInfoRAPFile("tapDecimalPlaces is missing in Accounting Info", ACCOUNTING_TAP_DECIMAL_PLACES_MISSING);
+		return FATAL_ERROR;
+	}
+	if (!m_transferBatch->accountingInfo->taxation && BatchContainsTaxes()) {
+		CreateAccountingInfoRAPFile("taxation group is missing in Accounting Info and batch contains taxes", 
+			ACCOUNTING_TAXATION_MISSING);
+		return FATAL_ERROR;
+	}
+	if (!m_transferBatch->accountingInfo->discounting && BatchContainsDiscounts()) {
+		CreateAccountingInfoRAPFile("discounting group is missing in Accounting Info and batch contains discounts", 
+			ACCOUNTING_DISCOUNTING_MISSING);
+		return FATAL_ERROR;
+	}
+	if (!m_transferBatch->accountingInfo->currencyConversionInfo && BatchContainsPositiveCharges()) {
+		CreateAccountingInfoRAPFile("currencyConversion group is missing in Accounting Info and batch contains charges greater than 0", 
+			ACCOUNTING_CURRENCY_CONVERSION_MISSING);
+		return FATAL_ERROR;
+	}
+
+	// check mandatory structures in Transfer Batch/Networl Information
+	if (!m_transferBatch->networkInfo->utcTimeOffsetInfo) {
+		CreateNetworkInfoRAPFile("utcTimeOffsetInfo is missing in Network Info", NETWORK_UTC_TIMEOFFSET_MISSING);
+		return FATAL_ERROR;
+	}
+
+	if (!m_transferBatch->networkInfo->recEntityInfo) {
+		CreateNetworkInfoRAPFile("recEntityInfo is missing in Network Info", NETWORK_REC_ENTITY_MISSING);
+		return FATAL_ERROR;
+	}
+
 	return TAP_VALID;
 }
 
 
-TAPValidationResult TAPValidator::ValidateNotification(const Notification& notification)
+TAPValidationResult TAPValidator::ValidateNotification()
 {
 	return TAP_VALID;
 }
@@ -399,12 +554,12 @@ TAPValidationResult TAPValidator::Validate(DataInterChange* dataInterchange)
 {
 	// TODO: add check
 	// if file is not addressed for our network, then return WRONG_ADDRESSEE;
-		
 	switch (dataInterchange->present) {
 		case DataInterChange_PR_transferBatch:
-			return ValidateTransferBatch(dataInterchange->choice.transferBatch);
+			m_transferBatch = &dataInterchange->choice.transferBatch;
+			return ValidateTransferBatch();
 		case DataInterChange_PR_notification:
-			return ValidateNotification(dataInterchange->choice.notification);
+			return ValidateNotification();
 		default:
 			return VALIDATION_IMPOSSIBLE;
 	}

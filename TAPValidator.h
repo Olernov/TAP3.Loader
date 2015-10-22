@@ -21,9 +21,14 @@ enum TAPValidationErrors
 	BATCH_CTRL_SPEC_VERSION_MISSING = 34,
 	BATCH_CTRL_TRANSFER_CUTOFF_MISSING = 36,
 
+	ACCOUNTING_TAXATION_MISSING = 30,
+	ACCOUNTING_DISCOUNTING_MISSING = 31,
 	ACCOUNTING_LOCAL_CURRENCY_MISSING = 32,
 	ACCOUNTING_CURRENCY_CONVERSION_MISSING = 34,
-	ACCOUNTING_TAP_DECIMAL_PLACES_MISSING = 35
+	ACCOUNTING_TAP_DECIMAL_PLACES_MISSING = 35,
+	
+	NETWORK_UTC_TIMEOFFSET_MISSING = 30,
+	NETWORK_REC_ENTITY_MISSING = 33
 };
 
 class TAPValidator
@@ -36,16 +41,24 @@ private:
 	Config& m_config;
 	string m_rapFilename;
 	string m_roamingHubName;
+	
+	TransferBatch* m_transferBatch;
 
-	ReturnBatch* FillReturnBatch(const TransferBatch& transferBatch, ReturnDetail* returnDetail);
-	TAPValidationResult ValidateTransferBatch(const TransferBatch&);
-	TAPValidationResult ValidateNotification(const Notification&);
 	int OctetString_fromInt64(OCTET_STRING& octetStr, long long value);
-	int GetASNStructSize(asn_TYPE_descriptor_t *td, void *sptr);
-	//ReturnDetail* CreateTransferBatchError(const TransferBatch& transferBatch, int errorCode);
-	int CreateTransferBatchRAPFile(string logMessage, const TransferBatch& transferBatch, int errorCode);
-	ReturnDetail* CreateBatchControlInfoError(const TransferBatch& transferBatch, int errorCode);
-	int CreateBatchControlInfoRAPFile(string logMessage, const TransferBatch& transferBatch, int errorCode);
+	bool BatchContainsTaxes();
+	bool BatchContainsDiscounts();
+	bool ChargeInfoContainsPositiveCharges(ChargeInformation* chargeInfo);
+	bool BatchContainsPositiveCharges();
+
+	int CreateTransferBatchRAPFile(string logMessage, int errorCode);
+	int CreateBatchControlInfoRAPFile(string logMessage, int errorCode);
+	int CreateAccountingInfoRAPFile(string logMessage, int errorCode);
+	int CreateNetworkInfoRAPFile(string logMessage, int errorCode);
+
 	bool UploadFileToFtp(string filename, string fullFileName, FtpSetting ftpSetting);
 	int EncodeAndUpload(string filename, string fileTypeDescr, asn_TYPE_descriptor_t* pASNTypeDescr, ReturnBatch* pASNStructure);
+
+	ReturnBatch* FillReturnBatch(ReturnDetail* returnDetail);
+	TAPValidationResult ValidateTransferBatch();
+	TAPValidationResult ValidateNotification();
 };
