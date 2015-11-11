@@ -430,7 +430,6 @@ long ProcessChrInfo(long long eventID, ChargeInformation* chargeInformation, cha
 		otlStream.close();
 	}
 	
-
 	return TL_OK;
 }
 //------------------------------------------------------
@@ -1011,44 +1010,20 @@ int LoadTAPFileToDB( unsigned char* buffer, long dataLen, long fileID, bool bPri
 
 		// Procesing Transfer Batch
 		
-
-		// проверка наличия обязательных структур в Transfer Batch/Batch Control Information
-		// MOVED TO TAPValidator
-		TAPValidator tapValidator(otlConnect, config, "RCRUS27NNN0100001", "TEST_ROAMING_HUB");
+		TAPValidator tapValidator(otlConnect, config);
 		TAPValidationResult validationRes = tapValidator.Validate(dataInterchange);
-		// if(!dataInterchange->choice.transferBatch.batchControlInfo->sender  || !dataInterchange->choice.transferBatch.batchControlInfo->recipient ||
-		//	!dataInterchange->choice.transferBatch.batchControlInfo->fileSequenceNumber || 
-		//	!dataInterchange->choice.transferBatch.batchControlInfo->transferCutOffTimeStamp || !dataInterchange->choice.transferBatch.batchControlInfo->fileAvailableTimeStamp )
-		//{
-		//	log( LOG_ERROR, "Some mandatory structures are missing in Transfer Batch/Batch Control Information");
-		//	return TL_MISSINGSTRUCT;
-		//}
 
-		//// проверка наличия обязательных структур в Transfer Batch/Accounting Information
-		//if(!dataInterchange->choice.transferBatch.accountingInfo->localCurrency || !dataInterchange->choice.transferBatch.accountingInfo->tapDecimalPlaces ||
-		//	!dataInterchange->choice.transferBatch.accountingInfo->currencyConversionInfo || !dataInterchange->choice.transferBatch.accountingInfo->tapDecimalPlaces)
-		//{
-		//	log( LOG_ERROR, "Some mandatory structures are missing in Transfer Batch/Accounting Information");
-		//	return TL_MISSINGSTRUCT;
-		//}
-
-
-		//// проверка наличия обязательных структур в Transfer Batch/Network Information
-		//if(!dataInterchange->choice.transferBatch.networkInfo->utcTimeOffsetInfo || !dataInterchange->choice.transferBatch.networkInfo->recEntityInfo)
-		//{
-		//	log( LOG_ERROR, "Some mandatory structures are missing in Transfer Batch/Network Information");
-		//	return TL_MISSINGSTRUCT;
-		//}
-
-		dblTAPPower=pow( (double) 10, *dataInterchange->choice.transferBatch.accountingInfo->tapDecimalPlaces);
-		string fn;
-
+		if (validationRes == VALIDATION_IMPOSSIBLE) {
+			log(LOG_ERROR, "Unable to validate TAP file. File is not loaded.");
+			return TL_TAP_NOT_VALIDATED;
+		}
+		
 		// REGISTER TAP FILE IN DB CODE
 		otlStream.open( 1 /*stream buffer size in logical rows*/, 
 			"insert into BILLING.TAP3_FILE (FILE_ID, FILENAME, SENDER, RECIPIENT, SEQUENCE_NUMBER , CREATION_STAMP, CREATION_UTCOFF,\
 			CUTOFF_STAMP, CUTOFF_UTCOFF, AVAILABLE_STAMP, AVAILABLE_UTCOFF, LOCAL_CURRENCY, LOAD_TIME, EARLIEST_TIME, EARLIEST_UTCOFF, \
-			LATEST_TIME, LATEST_UTCOFF, EVENT_COUNT, TOTAL_CHARGE, TOTAL_TAX, TOTAL_DISCOUNT, NOTIFICATION, STATUS, TAP_VERSION, TAP_RELEASE, FILE_TYPE_INDICATOR, \
-			TAP_DECIMAL_PLACES) \
+			LATEST_TIME, LATEST_UTCOFF, EVENT_COUNT, TOTAL_CHARGE, TOTAL_TAX, TOTAL_DISCOUNT, NOTIFICATION, STATUS, TAP_VERSION, TAP_RELEASE, "
+			"FILE_TYPE_INDICATOR, TAP_DECIMAL_PLACES, CANCEL_RAP_FILE_SEQNUM, CANCEL_RAP_FILE_ID) \
 			values (\
 			  :hfileid /*long,in*/, :filename/*char[255],in*/, :sender/*char[20],in*/, :recipient/*char[20],in*/, :seq_num/*char[10],in*/,\
 			  to_date(:creation_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :creation_utcoff /* char[10],in */,\
@@ -1056,40 +1031,95 @@ int LoadTAPFileToDB( unsigned char* buffer, long dataLen, long fileID, bool bPri
 			  to_date(:available_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :available_utcoff /* char[10],in */,\
 			  :local_currency /* char[255],in */, sysdate, to_date(:earliest /*char[20],in*/, 'yyyymmddhh24miss'), :earliest_utcoff /* char[10],in */,\
 			  to_date(:latest /*char[20],in*/, 'yyyymmddhh24miss'), :latest_utcoff /* char[10],in */, :eventcount /* long,in */, :totalchr /* double,in */, \
-			  			  :total_tax /*double,in*/, :total_discount /*double,in*/, 0 /*notification*/, :status /*long,in*/, :tapVer /*long,in*/, :specif /*long,in*/, :filetype /*char[5],in*/,\
-			  :tapDecimalPlaces /*long,in*/) ", otlConnect);
-		otlStream 
+			  :total_tax /*double,in*/, :total_discount /*double,in*/, 0 /*notification*/, :status /*long,in*/, :tapVer /*long,in*/, :specif /*long,in*/, "
+			  ":filetype /*char[5],in*/, :tapDecimalPlaces /*long,in*/, :cancel_rap_file_seqnum /*char[10],in*/, :cancel_rap_file_id /*long,in*/) ", otlConnect);
+		otlStream
 			<< fileID
-			<< pShortName 
-			<< (char*) dataInterchange->choice.transferBatch.batchControlInfo->sender->buf 
-			<< (char*) dataInterchange->choice.transferBatch.batchControlInfo->recipient->buf 
-			<< dataInterchange->choice.transferBatch.batchControlInfo->fileSequenceNumber->buf
-			<< (dataInterchange->choice.transferBatch.batchControlInfo->fileCreationTimeStamp ? 
-				(const char*)dataInterchange->choice.transferBatch.batchControlInfo->fileCreationTimeStamp->localTimeStamp->buf : "")
-			<< (dataInterchange->choice.transferBatch.batchControlInfo->fileCreationTimeStamp ? 
-				(const char*)dataInterchange->choice.transferBatch.batchControlInfo->fileCreationTimeStamp->utcTimeOffset->buf : "")
-			<< dataInterchange->choice.transferBatch.batchControlInfo->transferCutOffTimeStamp->localTimeStamp->buf
-			<< dataInterchange->choice.transferBatch.batchControlInfo->transferCutOffTimeStamp->utcTimeOffset->buf
-			<< dataInterchange->choice.transferBatch.batchControlInfo->fileAvailableTimeStamp->localTimeStamp->buf
-			<< dataInterchange->choice.transferBatch.batchControlInfo->fileAvailableTimeStamp->utcTimeOffset->buf
-			<< dataInterchange->choice.transferBatch.accountingInfo->localCurrency->buf
-			<< dataInterchange->choice.transferBatch.auditControlInfo->earliestCallTimeStamp->localTimeStamp->buf
-			<< dataInterchange->choice.transferBatch.auditControlInfo->earliestCallTimeStamp->utcTimeOffset->buf
-			<< dataInterchange->choice.transferBatch.auditControlInfo->latestCallTimeStamp->localTimeStamp->buf
-			<< dataInterchange->choice.transferBatch.auditControlInfo->latestCallTimeStamp->utcTimeOffset->buf
-			<< *dataInterchange->choice.transferBatch.auditControlInfo->callEventDetailsCount
-			<< OctetStr2Int64( *dataInterchange->choice.transferBatch.auditControlInfo->totalCharge ) / dblTAPPower
-			<< OctetStr2Int64( *dataInterchange->choice.transferBatch.auditControlInfo->totalTaxValue ) / dblTAPPower
-			<< OctetStr2Int64( *dataInterchange->choice.transferBatch.auditControlInfo->totalDiscountValue ) / dblTAPPower
-			<< (long) INFILE_STATUS_NEW
-			<< *dataInterchange->choice.transferBatch.batchControlInfo->specificationVersionNumber
-			<< *dataInterchange->choice.transferBatch.batchControlInfo->releaseVersionNumber
-			<< (dataInterchange->choice.transferBatch.batchControlInfo->fileTypeIndicator ? (const char*)dataInterchange->choice.transferBatch.batchControlInfo->fileTypeIndicator->buf : "")
-			<< *dataInterchange->choice.transferBatch.accountingInfo->tapDecimalPlaces
-			;
+			<< pShortName
+			<< ( dataInterchange->choice.transferBatch.batchControlInfo->sender ?
+				 (char*) dataInterchange->choice.transferBatch.batchControlInfo->sender->buf : "" )
+			<< ( dataInterchange->choice.transferBatch.batchControlInfo->recipient ?
+				(char*) dataInterchange->choice.transferBatch.batchControlInfo->recipient->buf : "" )
+			<< ( dataInterchange->choice.transferBatch.batchControlInfo->fileSequenceNumber ?
+				(char*) dataInterchange->choice.transferBatch.batchControlInfo->fileSequenceNumber->buf : "" )
+			<< ( dataInterchange->choice.transferBatch.batchControlInfo->fileCreationTimeStamp ?
+				(char*) dataInterchange->choice.transferBatch.batchControlInfo->fileCreationTimeStamp->localTimeStamp->buf : "" )
+			<< ( dataInterchange->choice.transferBatch.batchControlInfo->fileCreationTimeStamp ?
+				(char*) dataInterchange->choice.transferBatch.batchControlInfo->fileCreationTimeStamp->utcTimeOffset->buf : "" )
+			<< ( dataInterchange->choice.transferBatch.batchControlInfo->transferCutOffTimeStamp ?
+				(char*) dataInterchange->choice.transferBatch.batchControlInfo->transferCutOffTimeStamp->localTimeStamp->buf : "" )
+			<< ( dataInterchange->choice.transferBatch.batchControlInfo->transferCutOffTimeStamp ?
+				(char*) dataInterchange->choice.transferBatch.batchControlInfo->transferCutOffTimeStamp->utcTimeOffset->buf : "" )
+			<< ( dataInterchange->choice.transferBatch.batchControlInfo->fileAvailableTimeStamp ?
+				(char*) dataInterchange->choice.transferBatch.batchControlInfo->fileAvailableTimeStamp->localTimeStamp->buf : "" )
+			<< ( dataInterchange->choice.transferBatch.batchControlInfo->fileAvailableTimeStamp ?
+				(char*) dataInterchange->choice.transferBatch.batchControlInfo->fileAvailableTimeStamp->utcTimeOffset->buf : "" )
+			<< ( dataInterchange->choice.transferBatch.accountingInfo->localCurrency ?
+				(char*) dataInterchange->choice.transferBatch.accountingInfo->localCurrency->buf : "" )
+			<< ( dataInterchange->choice.transferBatch.auditControlInfo->earliestCallTimeStamp ?
+				(char*) dataInterchange->choice.transferBatch.auditControlInfo->earliestCallTimeStamp->localTimeStamp->buf : "" )
+			<< ( dataInterchange->choice.transferBatch.auditControlInfo->earliestCallTimeStamp ?
+				(char*) dataInterchange->choice.transferBatch.auditControlInfo->earliestCallTimeStamp->utcTimeOffset->buf : "" )
+			<< ( dataInterchange->choice.transferBatch.auditControlInfo->latestCallTimeStamp ?
+				(char*) dataInterchange->choice.transferBatch.auditControlInfo->latestCallTimeStamp->localTimeStamp->buf : "" )
+			<< ( dataInterchange->choice.transferBatch.auditControlInfo->latestCallTimeStamp ?
+				(char*) dataInterchange->choice.transferBatch.auditControlInfo->latestCallTimeStamp->utcTimeOffset->buf : "" );
+		if (dataInterchange->choice.transferBatch.auditControlInfo->callEventDetailsCount)
+			otlStream << *dataInterchange->choice.transferBatch.auditControlInfo->callEventDetailsCount;
+		else
+			otlStream << otl_null();
+		if (dataInterchange->choice.transferBatch.auditControlInfo->totalCharge)
+			otlStream << OctetStr2Int64(*dataInterchange->choice.transferBatch.auditControlInfo->totalCharge) / dblTAPPower;
+		else
+			otlStream << otl_null();
+		if (dataInterchange->choice.transferBatch.auditControlInfo->totalTaxValue)
+			otlStream << OctetStr2Int64(*dataInterchange->choice.transferBatch.auditControlInfo->totalTaxValue) / dblTAPPower;
+		else
+			otlStream << otl_null();
+		if (dataInterchange->choice.transferBatch.auditControlInfo->totalDiscountValue)
+			otlStream << OctetStr2Int64(*dataInterchange->choice.transferBatch.auditControlInfo->totalDiscountValue) / dblTAPPower;
+		else
+			otlStream << otl_null();
+
+		if (validationRes == FATAL_ERROR) 
+			otlStream << (long) INFILE_STATUS_FATAL;
+		else
+			otlStream << (long) INFILE_STATUS_NEW;
+			
+		if (dataInterchange->choice.transferBatch.batchControlInfo->specificationVersionNumber)
+			otlStream << *dataInterchange->choice.transferBatch.batchControlInfo->specificationVersionNumber;
+		else
+			otlStream << otl_null();
+		if (dataInterchange->choice.transferBatch.batchControlInfo->releaseVersionNumber)
+			otlStream << *dataInterchange->choice.transferBatch.batchControlInfo->releaseVersionNumber;
+		else
+			otlStream << otl_null();
+
+		otlStream << ( dataInterchange->choice.transferBatch.batchControlInfo->fileTypeIndicator ? 
+			(const char*) dataInterchange->choice.transferBatch.batchControlInfo->fileTypeIndicator->buf : "" );
+
+		if (dataInterchange->choice.transferBatch.accountingInfo->tapDecimalPlaces)
+			otlStream << *dataInterchange->choice.transferBatch.accountingInfo->tapDecimalPlaces;
+		else
+			otlStream << otl_null();
+
+		if (validationRes == FATAL_ERROR)
+			otlStream
+				<< tapValidator.GetRapSequenceNum()
+				<< tapValidator.GetRapFileID();
+		else
+			otlStream
+				<< otl_null()
+				<< otl_null();
+
 		otlStream.flush();
 		otlStream.close();
+
+		if (validationRes == FATAL_ERROR)
+			// Finish processing here. No call records are uploaded for Fatal Error TAP files
+			return TL_OK;
 		
+		dblTAPPower=pow( (double) 10, *dataInterchange->choice.transferBatch.accountingInfo->tapDecimalPlaces);
 		long long eventID;
 		
 		// обработка звонковых записей
@@ -1423,130 +1453,102 @@ int LoadRAPSevereReturn(long fileID, const SevereReturn& severeReturn)
 
 //-----------------------------------------------------
 
-int LoadRAPFileToDB( unsigned char* buffer, long dataLen, long fileID, bool bPrintOnly ) 
+int LoadReturnBatchToDB(ReturnBatch* returnBatch, long fileID, string rapFilename, long fileStatus)
 {
-	int index=0;
-	try {
-		asn_dec_rval_t rval;
-	
-		rval = ber_decode(0, &asn_DEF_ReturnBatch, (void**) &returnBatch, buffer, dataLen);
+	// set TAP power value used to convert integer values from file to double values for DB
+	if( returnBatch->rapBatchControlInfoRap.tapDecimalPlaces )
+		dblTAPPower = pow( (double) 10, *returnBatch->rapBatchControlInfoRap.tapDecimalPlaces );
+	else
+		dblTAPPower = 1;
 
-		if(rval.code != RC_OK) {
-			log( LOG_ERROR, string("Error while decoding ASN file. Error code ") + to_string( static_cast<unsigned long long> (rval.code)));
-			Finalize();
+	otl_nocommit_stream otlStream;
+	try {	
+	// REGISTER RAP FILE IN DB 
+	otlStream.open( 1 /*stream buffer size in logical rows*/, 
+		"insert into BILLING.RAP_FILE (FILE_ID, FILENAME, SENDER, RECIPIENT, ROAMING_PARTNER, SEQUENCE_NUMBER , CREATION_STAMP, CREATION_UTCOFF,"
+		"AVAILABLE_STAMP, AVAILABLE_UTCOFF, TAP_CURRENCY, LOAD_TIME, "
+		"RETURN_DETAILS_COUNT, TOTAL_SEVERE_RETURN, TOTAL_SEVERE_RETURN_TAX, STATUS, RAP_VERSION, RAP_RELEASE, FILE_TYPE_INDICATOR, "
+		"TAP_DECIMAL_PLACES, TAP_VERSION, TAP_RELEASE) "
+		"values ("
+		":hfileid /*long,in*/, :filename/*char[255],in*/, :sender/*char[20],in*/, :recipient/*char[20],in*/, :roam_partner/*char[10],in*/, :seq_num/*char[10],in*/,"
+		"to_date(:creation_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :creation_utcoff /* char[10],in */,"
+		"to_date(:available_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :available_utcoff /* char[10],in */,"
+		":tap_currency /* char[255],in */, sysdate, :eventcount /* long,in */, :total_ret /* double,in */, :total_ret_tax /*double,in*/, :status /*long,in*/, "
+		":rapVer /*long,in*/, :rapSpecif /*long,in*/, :filetype /*char[5],in*/, :tapDecimalPlaces /*long,in*/, "
+		":tapVersion /*long,in*/, :tapSpecif /*long,in*/ ) ", otlConnect);
+
+	otlStream 
+		<< fileID
+		<< rapFilename 
+		<< returnBatch->rapBatchControlInfoRap.sender.buf
+		<< returnBatch->rapBatchControlInfoRap.recipient.buf
+		<< (returnBatch->rapBatchControlInfoRap.roamingPartner ? (const char*) returnBatch->rapBatchControlInfoRap.roamingPartner->buf : "" )
+		<< returnBatch->rapBatchControlInfoRap.rapFileSequenceNumber.buf
+		<< (const char*) returnBatch->rapBatchControlInfoRap.rapFileCreationTimeStamp.localTimeStamp->buf
+		<< (const char*) returnBatch->rapBatchControlInfoRap.rapFileCreationTimeStamp.utcTimeOffset->buf
+		<< (const char*) returnBatch->rapBatchControlInfoRap.rapFileAvailableTimeStamp.localTimeStamp->buf
+		<< (const char*) returnBatch->rapBatchControlInfoRap.rapFileAvailableTimeStamp.utcTimeOffset->buf
+		<< ( returnBatch->rapBatchControlInfoRap.tapCurrency ? (const char*) returnBatch->rapBatchControlInfoRap.tapCurrency->buf : "" )
+		<< returnBatch->rapAuditControlInfo.returnDetailsCount
+		<< OctetStr2Int64(returnBatch->rapAuditControlInfo.totalSevereReturnValue) / dblTAPPower;
+
+	if( returnBatch->rapAuditControlInfo.totalSevereReturnTax )
+		otlStream << OctetStr2Int64(*returnBatch->rapAuditControlInfo.totalSevereReturnTax) / dblTAPPower;
+	else
+		otlStream << otl_null();
+
+	otlStream
+		<< fileStatus
+		<< returnBatch->rapBatchControlInfoRap.rapSpecificationVersionNumber
+		<< returnBatch->rapBatchControlInfoRap.rapReleaseVersionNumber
+		<< (returnBatch->rapBatchControlInfoRap.fileTypeIndicator ? (const char*) returnBatch->rapBatchControlInfoRap.fileTypeIndicator->buf : "" );
+
+	if( returnBatch->rapBatchControlInfoRap.tapDecimalPlaces  )
+		otlStream << *returnBatch->rapBatchControlInfoRap.tapDecimalPlaces;
+	else
+		otlStream << otl_null();
+
+	if( returnBatch->rapBatchControlInfoRap.specificationVersionNumber  )
+		otlStream << *returnBatch->rapBatchControlInfoRap.specificationVersionNumber;
+	else
+		otlStream << otl_null();
+
+	if( returnBatch->rapBatchControlInfoRap.releaseVersionNumber )
+		otlStream << *returnBatch->rapBatchControlInfoRap.releaseVersionNumber;
+	else
+		otlStream << otl_null();
+
+	otlStream.flush();
+	otlStream.close();
+
+	int loadResult = -1;
+	for (int i = 0; i < returnBatch->returnDetails.list.count; i++) {
+		switch (returnBatch->returnDetails.list.array[i]->present) {
+		case ReturnDetail_PR_stopReturn:
+			loadResult = LoadRAPStopOrMissingInfo(fileID, (char*)returnBatch->returnDetails.list.array[i]->choice.stopReturn.lastSeqNumber.buf, "", "",
+				returnBatch->returnDetails.list.array[i]->choice.stopReturn.operatorSpecList);
+			break;
+		case ReturnDetail_PR_missingReturn:
+			loadResult = LoadRAPStopOrMissingInfo(fileID, "",
+				(char*) returnBatch->returnDetails.list.array[i]->choice.missingReturn.startMissingSeqNumber.buf, 
+				returnBatch->returnDetails.list.array[i]->choice.missingReturn.endMissingSeqNumber ?
+					(char*) returnBatch->returnDetails.list.array[i]->choice.missingReturn.endMissingSeqNumber->buf : "",
+				returnBatch->returnDetails.list.array[i]->choice.stopReturn.operatorSpecList);
+			break;
+		case ReturnDetail_PR_fatalReturn:
+			loadResult = LoadRAPFatalReturn(fileID, returnBatch->returnDetails.list.array[i]->choice.fatalReturn);
+			break;
+		case ReturnDetail_PR_severeReturn:
+			loadResult = LoadRAPSevereReturn(fileID, returnBatch->returnDetails.list.array[i]->choice.severeReturn);
+			break;
+		default:
+			log(LOG_ERROR, "Unknown return detail structure: " + to_string(static_cast<unsigned long long> (returnBatch->returnDetails.list.array[i]->present)));
 			return TL_DECODEERROR;
 		}
 
-		if( bPrintOnly ) {
-			char* printName = new char[ strlen(pShortName)+5 ];
-			sprintf(printName, "%s.txt", pShortName);
-			FILE* fFileContents = fopen (printName, "w");
-			if ( fFileContents ) {
-				asn_fprint(fFileContents, &asn_DEF_ReturnBatch, returnBatch);
-				fclose(fFileContents);
-			}
-			else
-			{
-				printf("Unable to open output file %s\n", printName);
-			}
-			delete [] printName;
-			printf("---- File contents printed to output file. Exiting. -------");
-			return TL_OK;
-		}
-
-		// set TAP power value used to convert integer values from file to double values for DB
-		if( returnBatch->rapBatchControlInfoRap.tapDecimalPlaces )
-			dblTAPPower=pow( (double) 10, *returnBatch->rapBatchControlInfoRap.tapDecimalPlaces );
-		else
-			dblTAPPower=1;
-
-		otl_nocommit_stream otlStream;
-		
-		// REGISTER RAP FILE IN DB 
-		otlStream.open( 1 /*stream buffer size in logical rows*/, 
-			"insert into BILLING.RAP_FILE (FILE_ID, FILENAME, SENDER, RECIPIENT, ROAMING_PARTNER, SEQUENCE_NUMBER , CREATION_STAMP, CREATION_UTCOFF,\
-			AVAILABLE_STAMP, AVAILABLE_UTCOFF, TAP_CURRENCY, LOAD_TIME, \
-			RETURN_DETAILS_COUNT, TOTAL_SEVERE_RETURN, TOTAL_SEVERE_RETURN_TAX, STATUS, RAP_VERSION, RAP_RELEASE, FILE_TYPE_INDICATOR, \
-			TAP_DECIMAL_PLACES, TAP_VERSION, TAP_RELEASE) \
-			values (\
-			  :hfileid /*long,in*/, :filename/*char[255],in*/, :sender/*char[20],in*/, :recipient/*char[20],in*/, :roam_partner/*char[10],in*/, :seq_num/*char[10],in*/,\
-			  to_date(:creation_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :creation_utcoff /* char[10],in */,\
-			  to_date(:available_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :available_utcoff /* char[10],in */,\
-			  :tap_currency /* char[255],in */, sysdate, :eventcount /* long,in */, :total_ret /* double,in */, :total_ret_tax /*double,in*/, 0 /*status*/, \
-			  :rapVer /*long,in*/, :rapSpecif /*long,in*/, :filetype /*char[5],in*/, :tapDecimalPlaces /*long,in*/, \
-			  :tapVersion /*long,in*/, :tapSpecif /*long,in*/ ) ", otlConnect);
-
-		otlStream 
-			<< fileID
-			<< pShortName 
-			<< returnBatch->rapBatchControlInfoRap.sender.buf
-			<< returnBatch->rapBatchControlInfoRap.recipient.buf
-			<< (returnBatch->rapBatchControlInfoRap.roamingPartner ? (const char*) returnBatch->rapBatchControlInfoRap.roamingPartner->buf : "" )
-			<< returnBatch->rapBatchControlInfoRap.rapFileSequenceNumber.buf
-			<< (const char*) returnBatch->rapBatchControlInfoRap.rapFileCreationTimeStamp.localTimeStamp->buf
-			<< (const char*) returnBatch->rapBatchControlInfoRap.rapFileCreationTimeStamp.utcTimeOffset->buf
-			<< (const char*) returnBatch->rapBatchControlInfoRap.rapFileAvailableTimeStamp.localTimeStamp->buf
-			<< (const char*) returnBatch->rapBatchControlInfoRap.rapFileAvailableTimeStamp.utcTimeOffset->buf
-			<< ( returnBatch->rapBatchControlInfoRap.tapCurrency ? (const char*) returnBatch->rapBatchControlInfoRap.tapCurrency->buf : "" )
-			<< returnBatch->rapAuditControlInfo.returnDetailsCount
-			<< OctetStr2Int64(returnBatch->rapAuditControlInfo.totalSevereReturnValue) / dblTAPPower;
-
-		if( returnBatch->rapAuditControlInfo.totalSevereReturnTax )
-			otlStream << OctetStr2Int64(*returnBatch->rapAuditControlInfo.totalSevereReturnTax) / dblTAPPower;
-		else
-			otlStream << otl_null();
-
-		otlStream
-			<< returnBatch->rapBatchControlInfoRap.rapSpecificationVersionNumber
-			<< returnBatch->rapBatchControlInfoRap.rapReleaseVersionNumber
-			<< (returnBatch->rapBatchControlInfoRap.fileTypeIndicator ? (const char*) returnBatch->rapBatchControlInfoRap.fileTypeIndicator->buf : "" );
-
-		if( returnBatch->rapBatchControlInfoRap.tapDecimalPlaces  )
-			otlStream << *returnBatch->rapBatchControlInfoRap.tapDecimalPlaces;
-		else
-			otlStream << otl_null();
-
-		if( returnBatch->rapBatchControlInfoRap.specificationVersionNumber  )
-			otlStream << *returnBatch->rapBatchControlInfoRap.specificationVersionNumber;
-		else
-			otlStream << otl_null();
-
-		if( returnBatch->rapBatchControlInfoRap.releaseVersionNumber )
-			otlStream << *returnBatch->rapBatchControlInfoRap.releaseVersionNumber;
-		else
-			otlStream << otl_null();
-
-		otlStream.flush();
-		otlStream.close();
-
-		int loadResult = -1;
-		for (int i = 0; i < returnBatch->returnDetails.list.count; i++) {
-			switch (returnBatch->returnDetails.list.array[i]->present) {
-			case ReturnDetail_PR_stopReturn:
-				loadResult = LoadRAPStopOrMissingInfo(fileID, (char*)returnBatch->returnDetails.list.array[i]->choice.stopReturn.lastSeqNumber.buf, "", "",
-					returnBatch->returnDetails.list.array[i]->choice.stopReturn.operatorSpecList);
-				break;
-			case ReturnDetail_PR_missingReturn:
-				loadResult = LoadRAPStopOrMissingInfo(fileID, "",
-					(char*) returnBatch->returnDetails.list.array[i]->choice.missingReturn.startMissingSeqNumber.buf, 
-					returnBatch->returnDetails.list.array[i]->choice.missingReturn.endMissingSeqNumber ?
-						(char*) returnBatch->returnDetails.list.array[i]->choice.missingReturn.endMissingSeqNumber->buf : "",
-					returnBatch->returnDetails.list.array[i]->choice.stopReturn.operatorSpecList);
-				break;
-			case ReturnDetail_PR_fatalReturn:
-				loadResult = LoadRAPFatalReturn(fileID, returnBatch->returnDetails.list.array[i]->choice.fatalReturn);
-				break;
-			case ReturnDetail_PR_severeReturn:
-				loadResult = LoadRAPSevereReturn(fileID, returnBatch->returnDetails.list.array[i]->choice.severeReturn);
-				break;
-			default:
-				log(LOG_ERROR, "Unknown return detail structure: " + to_string(static_cast<unsigned long long> (returnBatch->returnDetails.list.array[i]->present)));
-				return TL_DECODEERROR;
-			}
-
-			if (loadResult != TL_OK)
-				return loadResult;
-		}
+		if (loadResult != TL_OK)
+			return loadResult;
+	}
 	}
 	catch (otl_exception &otlEx) {
 		otlConnect.rollback();
@@ -1558,7 +1560,44 @@ int LoadRAPFileToDB( unsigned char* buffer, long dataLen, long fileID, bool bPri
 			log( LOG_ERROR, (char*) otlEx.var_info ); // log the variable that caused the error
 		return TL_ORACLEERROR;
 	}
-	
+	return TL_OK;
+}
+
+//--------------------------------------------------
+
+int LoadRAPFileToDB( unsigned char* buffer, long dataLen, long fileID, bool bPrintOnly ) 
+{
+	int index=0;
+	try {
+		asn_dec_rval_t rval;
+
+		rval = ber_decode(0, &asn_DEF_ReturnBatch, (void**) &returnBatch, buffer, dataLen);
+
+		if (rval.code != RC_OK) {
+			log(LOG_ERROR, string("Error while decoding ASN file. Error code ") + to_string(static_cast<unsigned long long> ( rval.code )));
+			Finalize();
+			return TL_DECODEERROR;
+		}
+
+		if (bPrintOnly) {
+			char* printName = new char[strlen(pShortName) + 5];
+			sprintf(printName, "%s.txt", pShortName);
+			FILE* fFileContents = fopen(printName, "w");
+			if (fFileContents) {
+				asn_fprint(fFileContents, &asn_DEF_ReturnBatch, returnBatch);
+				fclose(fFileContents);
+			}
+			else
+			{
+				printf("Unable to open output file %s\n", printName);
+			}
+			delete[] printName;
+			printf("---- File contents printed to output file. Exiting. -------");
+			return TL_OK;
+		}
+
+		return LoadReturnBatchToDB(returnBatch, fileID, pShortName, INFILE_STATUS_NEW);
+	}
 	catch(char* pMess)
 	{
 		log(LOG_ERROR, string("Exception caught: ") + string(pMess) + string(". Call number=") + to_string(static_cast<unsigned long long> (index)));
