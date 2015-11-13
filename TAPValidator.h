@@ -67,6 +67,13 @@ enum TAPValidationErrors
 	CALL_COUNT_MISMATCH = 100
 };
 
+class ErrContextAsnItem
+{
+public:
+	ErrContextAsnItem(asn_TYPE_descriptor_t* asnType, long itemOccurence) : m_asnType(asnType), m_itemOccurence(itemOccurence) {}
+	asn_TYPE_descriptor_t* m_asnType;
+	long m_itemOccurence;
+};
 
 class RAPFile
 {
@@ -107,13 +114,11 @@ private:
 	bool BatchContainsPositiveCharges();
 
 	int CreateTransferBatchRAPFile(string logMessage, int errorCode);
-	int CreateNotificationRAPFile(string logMessage, int errorCode, asn_TYPE_descriptor_t* level2item);
-	int CreateBatchControlInfoRAPFile(string logMessage, int errorCode, asn_TYPE_descriptor_t* level3item);
-	int CreateAccountingInfoRAPFile(string logMessage, int errorCode, asn_TYPE_descriptor_t* level3item, long level3itemOccurence,
-		asn_TYPE_descriptor_t* level4item, long level4itemOccurence,
-		asn_TYPE_descriptor_t* level5item, long level5itemOccurence);
-	int CreateNetworkInfoRAPFile(string logMessage, int errorCode, asn_TYPE_descriptor_t* level3item, long level3itemOccurence);
-	int CreateAuditControlInfoRAPFile(string logMessage, int errorCode, asn_TYPE_descriptor_t* level3item);
+	int CreateNotificationRAPFile(string logMessage, int errorCode, const vector<ErrContextAsnItem>& asnItems);
+	int CreateBatchControlInfoRAPFile(string logMessage, int errorCode, const vector<ErrContextAsnItem>& asnItems);
+	int CreateAccountingInfoRAPFile(string logMessage, int errorCode, const vector<ErrContextAsnItem>& asnItems);
+	int CreateNetworkInfoRAPFile(string logMessage, int errorCode, const vector<ErrContextAsnItem>& asnItems);
+	int CreateAuditControlInfoRAPFile(string logMessage, int errorCode, const vector<ErrContextAsnItem>& asnItems);
 
 	TAPValidationResult ValidateBatchControlInfo();
 	TAPValidationResult ValidateNetworkInfo();

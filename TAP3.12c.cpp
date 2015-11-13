@@ -1827,7 +1827,7 @@ int main(int argc, const char* argv[])
 			}
 
 			if(!strcmp(argv[3], "-d") || !strcmp(argv[3], "-D")) {
-				// debugMode = 1;
+				debugMode = 1;
 			}
 		}
 

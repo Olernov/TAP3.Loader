@@ -13,6 +13,8 @@
 
 using namespace std;
 
+#define NO_ASN_ITEMS	vector<ErrContextAsnItem>()
+
 extern void log(string filename, short msgType, string msgText);
 extern void log(short msgType, string msgText);
 extern long long OctetStr2Int64(const OCTET_STRING_t& octetStr);
@@ -300,7 +302,7 @@ bool TAPValidator::BatchContainsPositiveCharges()
 }
 
 
-int TAPValidator::CreateBatchControlInfoRAPFile(string logMessage, int errorCode, asn_TYPE_descriptor_t* level3item)
+int TAPValidator::CreateBatchControlInfoRAPFile(string logMessage, int errorCode, const vector<ErrContextAsnItem>& asnItems)
 {
 	log(LOG_ERROR, "Validating Batch Control Info: " + logMessage + ". Creating RAP file ");
 	ReturnDetail* returnDetail = (ReturnDetail*) calloc(1, sizeof(ReturnDetail));
@@ -338,22 +340,28 @@ int TAPValidator::CreateBatchControlInfoRAPFile(string logMessage, int errorCode
 	errorDetail->errorCode = errorCode;
 
 	// Fill Error Context List
+	int itemLevel = 1;
 	errorDetail->errorContext = (ErrorContextList*) calloc(1, sizeof(ErrorContextList));
 	ErrorContext* errorContext1level = (ErrorContext*) calloc(1, sizeof(ErrorContext));
 	errorContext1level->pathItemId = asn_DEF_TransferBatch.tags[0] >> 2; // 2 rightmost bits is TAG class at ASN1 compiler, remove it  
-	errorContext1level->itemLevel = 1;
+	errorContext1level->itemLevel = itemLevel++;
 	ASN_SEQUENCE_ADD(errorDetail->errorContext, errorContext1level);
 
 	ErrorContext* errorContext2level = (ErrorContext*) calloc(1, sizeof(ErrorContext));
 	errorContext2level->pathItemId = asn_DEF_BatchControlInfo.tags[0] >> 2; // 2 rightmost bits is TAG class at ASN1 compiler, remove it  
-	errorContext2level->itemLevel = 2;
+	errorContext2level->itemLevel = itemLevel++;
 	ASN_SEQUENCE_ADD(errorDetail->errorContext, errorContext2level);
 
-	if (level3item) {
-		ErrorContext* errorContext3level = (ErrorContext*) calloc(1, sizeof(ErrorContext));
-		errorContext3level->pathItemId = level3item->tags[0] >> 2; // 2 rightmost bits is TAG class at ASN1 compiler, remove it  
-		errorContext3level->itemLevel = 3;
-		ASN_SEQUENCE_ADD(errorDetail->errorContext, errorContext3level);
+	for (auto it = asnItems.cbegin() ; it != asnItems.cend(); it++)
+	{
+		ErrorContext* errorContext = (ErrorContext*) calloc(1, sizeof(ErrorContext));
+		errorContext->pathItemId = (*it).m_asnType->tags[0] >> 2; // 2 rightmost bits is TAG class at ASN1 compiler, remove it  
+		errorContext->itemLevel = itemLevel++;
+		if ((*it).m_itemOccurence > 0) {
+			errorContext->itemOccurrence = (ItemOccurrence_t*) calloc(1, sizeof(ItemOccurrence_t));
+			*errorContext->itemOccurrence = (*it).m_itemOccurence;
+		}
+		ASN_SEQUENCE_ADD(errorDetail->errorContext, errorContext);
 	}
 	ASN_SEQUENCE_ADD(&returnDetail->choice.fatalReturn.batchControlError->errorDetail, errorDetail);
 
@@ -395,17 +403,17 @@ TAPValidationResult TAPValidator::ValidateBatchControlInfo()
 	}
 	if (!m_transferBatch->batchControlInfo->fileAvailableTimeStamp) {
 		int createRapRes = CreateBatchControlInfoRAPFile("fileAvailableTimeStamp is missing in Batch Control Info", 
-			BATCH_CTRL_FILE_AVAIL_TIMESTAMP_MISSING, NULL);
+			BATCH_CTRL_FILE_AVAIL_TIMESTAMP_MISSING, NO_ASN_ITEMS);
 		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
 	}
 	if (!m_transferBatch->batchControlInfo->specificationVersionNumber) {
 		int createRapRes = CreateBatchControlInfoRAPFile("specificationVersionNumber is missing in Batch Control Info", 
-			BATCH_CTRL_SPEC_VERSION_MISSING, NULL);
+			BATCH_CTRL_SPEC_VERSION_MISSING, NO_ASN_ITEMS);
 		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
 	}
 	if (!m_transferBatch->batchControlInfo->transferCutOffTimeStamp) {
 		int createRapRes = CreateBatchControlInfoRAPFile("transferCutOffTimeStamp is missing in Batch Control Info", 
-			BATCH_CTRL_TRANSFER_CUTOFF_MISSING, NULL);
+			BATCH_CTRL_TRANSFER_CUTOFF_MISSING, NO_ASN_ITEMS);
 		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
 	}
 
@@ -415,14 +423,18 @@ TAPValidationResult TAPValidator::ValidateBatchControlInfo()
 	}
 	catch(const std::invalid_argument& ia) {
 		// wrong file sequence number given
+		vector<ErrContextAsnItem> asnItems;
+		asnItems.push_back(ErrContextAsnItem(&asn_DEF_FileSequenceNumber, 0));
 		int createRapRes = CreateBatchControlInfoRAPFile("fileSequenceNumber is not a number (syntax error)", 
-			FILE_SEQ_NUM_SYNTAX_ERROR, &asn_DEF_FileSequenceNumber);
+			FILE_SEQ_NUM_SYNTAX_ERROR, asnItems);
 		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
 	}
 	
 	if (!(fileSeqNum >= START_TAP_SEQUENCE_NUM && fileSeqNum <= END_TAP_SEQUENCE_NUM)) {
+		vector<ErrContextAsnItem> asnItems;
+		asnItems.push_back(ErrContextAsnItem(&asn_DEF_FileSequenceNumber, 0));
 		int createRapRes = CreateBatchControlInfoRAPFile("fileSequenceNumber is out of range", 
-			FILE_SEQ_NUM_OUT_OF_RANGE, &asn_DEF_FileSequenceNumber);
+			FILE_SEQ_NUM_OUT_OF_RANGE, asnItems);
 		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
 	}
 
@@ -430,8 +442,7 @@ TAPValidationResult TAPValidator::ValidateBatchControlInfo()
 }
 
 
-int TAPValidator::CreateAccountingInfoRAPFile(string logMessage, int errorCode, asn_TYPE_descriptor_t* level3item, long level3itemOccurence, 
-		asn_TYPE_descriptor_t* level4item = NULL, long level4itemOccurence = 0, asn_TYPE_descriptor_t* level5item = NULL, long level5itemOccurence = 0)
+int TAPValidator::CreateAccountingInfoRAPFile(string logMessage, int errorCode, const vector<ErrContextAsnItem>& asnItems)
 {
 	log(LOG_ERROR, "Validating Accounting Info: " + logMessage + ". Creating RAP file");
 	ReturnDetail* returnDetail = (ReturnDetail*) calloc(1, sizeof(ReturnDetail));
@@ -458,46 +469,28 @@ int TAPValidator::CreateAccountingInfoRAPFile(string logMessage, int errorCode, 
 	errorDetail->errorCode = errorCode;
 
 	// Fill Error Context List
+	int itemLevel = 1;
 	errorDetail->errorContext = (ErrorContextList*) calloc(1, sizeof(ErrorContextList));
 	ErrorContext* errorContext1level = (ErrorContext*) calloc(1, sizeof(ErrorContext));
 	errorContext1level->pathItemId = asn_DEF_TransferBatch.tags[0] >> 2; // 2 rightmost bits is TAG class at ASN1 compiler, remove it  
-	errorContext1level->itemLevel = 1;
+	errorContext1level->itemLevel = itemLevel++;
 	ASN_SEQUENCE_ADD(errorDetail->errorContext, errorContext1level);
 
 	ErrorContext* errorContext2level = (ErrorContext*) calloc(1, sizeof(ErrorContext));
 	errorContext2level->pathItemId = asn_DEF_AccountingInfo.tags[0] >> 2; // 2 rightmost bits is TAG class at ASN1 compiler, remove it  
-	errorContext2level->itemLevel = 2;
+	errorContext2level->itemLevel = itemLevel++;
 	ASN_SEQUENCE_ADD(errorDetail->errorContext, errorContext2level);
 	
-	if (level3item) {
-		ErrorContext* errorContext3level = (ErrorContext*) calloc(1, sizeof(ErrorContext));
-		errorContext3level->pathItemId = level3item->tags[0] >> 2; // 2 rightmost bits is TAG class at ASN1 compiler, remove it  
-		errorContext3level->itemLevel = 3;
-		if (level3itemOccurence > 0) {
-			errorContext3level->itemOccurrence = (ItemOccurrence_t*) calloc(1, sizeof(ItemOccurrence_t));
-			*errorContext3level->itemOccurrence = level3itemOccurence;
+	for (auto it = asnItems.cbegin() ; it != asnItems.cend(); it++)
+	{
+		ErrorContext* errorContext = (ErrorContext*) calloc(1, sizeof(ErrorContext));
+		errorContext->pathItemId = (*it).m_asnType->tags[0] >> 2; // 2 rightmost bits is TAG class at ASN1 compiler, remove it  
+		errorContext->itemLevel = itemLevel++;
+		if ((*it).m_itemOccurence > 0) {
+			errorContext->itemOccurrence = (ItemOccurrence_t*) calloc(1, sizeof(ItemOccurrence_t));
+			*errorContext->itemOccurrence = (*it).m_itemOccurence;
 		}
-		ASN_SEQUENCE_ADD(errorDetail->errorContext, errorContext3level);
-	}
-	if (level4item) {
-		ErrorContext* errorContext4level = (ErrorContext*) calloc(1, sizeof(ErrorContext));
-		errorContext4level->pathItemId = level4item->tags[0] >> 2; // 2 rightmost bits is TAG class at ASN1 compiler, remove it  
-		errorContext4level->itemLevel = 4;
-		if (level4itemOccurence > 0) {
-			errorContext4level->itemOccurrence = (ItemOccurrence_t*) calloc(1, sizeof(ItemOccurrence_t));
-			*errorContext4level->itemOccurrence = level4itemOccurence;
-		}
-		ASN_SEQUENCE_ADD(errorDetail->errorContext, errorContext4level);
-	}
-	if (level5item) {
-		ErrorContext* errorContext5level = (ErrorContext*) calloc(1, sizeof(ErrorContext));
-		errorContext5level->pathItemId = level5item->tags[0] >> 2; // 2 rightmost bits is TAG class at ASN1 compiler, remove it  
-		errorContext5level->itemLevel = 5;
-		if (level5itemOccurence > 0) {
-			errorContext5level->itemOccurrence = (ItemOccurrence_t*) calloc(1, sizeof(ItemOccurrence_t));
-			*errorContext5level->itemOccurrence = level5itemOccurence;
-		}
-		ASN_SEQUENCE_ADD(errorDetail->errorContext, errorContext5level);
+		ASN_SEQUENCE_ADD(errorDetail->errorContext, errorContext);
 	}
 	ASN_SEQUENCE_ADD(&returnDetail->choice.fatalReturn.accountingInfoError->errorDetail, errorDetail);
 
@@ -529,52 +522,54 @@ TAPValidationResult TAPValidator::ValidateAccountingInfo()
 {
 	if (!m_transferBatch->accountingInfo->localCurrency) {
 		int createRapRes = CreateAccountingInfoRAPFile("localCurrency is missing in Accounting Info", 
-			ACCOUNTING_LOCAL_CURRENCY_MISSING, NULL, 0);
+			ACCOUNTING_LOCAL_CURRENCY_MISSING, NO_ASN_ITEMS);
 		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
 	}
 	if (!m_transferBatch->accountingInfo->tapDecimalPlaces) {
 		int createRapRes = CreateAccountingInfoRAPFile("tapDecimalPlaces is missing in Accounting Info", 
-			ACCOUNTING_TAP_DECIMAL_PLACES_MISSING, NULL, 0);
+			ACCOUNTING_TAP_DECIMAL_PLACES_MISSING, NO_ASN_ITEMS);
 		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
 	}
 	if (!m_transferBatch->accountingInfo->taxation && BatchContainsTaxes()) {
 		int createRapRes = CreateAccountingInfoRAPFile(
 			"taxation group is missing in Accounting Info and batch contains taxes", 
-			ACCOUNTING_TAXATION_MISSING, NULL, 0);
+			ACCOUNTING_TAXATION_MISSING, NO_ASN_ITEMS);
 		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
 	}
 	if (!m_transferBatch->accountingInfo->discounting && BatchContainsDiscounts()) {
 		int createRapRes = CreateAccountingInfoRAPFile(
 			"discounting group is missing in Accounting Info and batch contains discounts", 
-			ACCOUNTING_DISCOUNTING_MISSING, NULL, 0);
+			ACCOUNTING_DISCOUNTING_MISSING, NO_ASN_ITEMS);
 		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
 	}
 	if (!m_transferBatch->accountingInfo->currencyConversionInfo && BatchContainsPositiveCharges()) {
 		int createRapRes = CreateAccountingInfoRAPFile(
 			"currencyConversion group is missing in Accounting Info and batch contains charges greater than 0",
-			ACCOUNTING_CURRENCY_CONVERSION_MISSING, NULL, 0);
+			ACCOUNTING_CURRENCY_CONVERSION_MISSING, NO_ASN_ITEMS);
 		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
 	}
 	// Validating currency conversion table
 	if (m_transferBatch->accountingInfo->currencyConversionInfo) {
 		set<ExchangeRateCode_t> exchangeRateCodes;
 		for (int i = 0; i < m_transferBatch->accountingInfo->currencyConversionInfo->list.count; i++) {
+			vector<ErrContextAsnItem> asnItems;
+			asnItems.push_back(ErrContextAsnItem(&asn_DEF_CurrencyConversionList, i + 1));
 			if (!m_transferBatch->accountingInfo->currencyConversionInfo->list.array[i]->exchangeRateCode) {
 				int createRapRes = CreateAccountingInfoRAPFile(
 					"Mandatory item Exchange Rate Code missing within group Currency Conversion",
-					CURRENCY_CONVERSION_EXRATE_CODE_MISSING, &asn_DEF_CurrencyConversionList, i+1);
+					CURRENCY_CONVERSION_EXRATE_CODE_MISSING, asnItems);
 				return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
 			}
 			if (!m_transferBatch->accountingInfo->currencyConversionInfo->list.array[i]->numberOfDecimalPlaces) {
 				int createRapRes = CreateAccountingInfoRAPFile(
 					"Mandatory item Exchange Rate Code missing within group Currency Conversion",
-					CURRENCY_CONVERSION_NUM_OF_DEC_PLACES_MISSING, &asn_DEF_CurrencyConversionList, i+1);
+					CURRENCY_CONVERSION_NUM_OF_DEC_PLACES_MISSING, asnItems);
 				return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
 			}
 			if (!m_transferBatch->accountingInfo->currencyConversionInfo->list.array[i]->exchangeRate) {
 				int createRapRes = CreateAccountingInfoRAPFile(
 					"Mandatory item Exchange Rate Code missing within group Currency Conversion",
-					CURRENCY_CONVERSION_EXCHANGE_RATE_MISSING, &asn_DEF_CurrencyConversionList, i+1);
+					CURRENCY_CONVERSION_EXCHANGE_RATE_MISSING, asnItems);
 				return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
 			}
 			// check exchange rate code duplication
@@ -582,7 +577,7 @@ TAPValidationResult TAPValidator::ValidateAccountingInfo()
 					exchangeRateCodes.end()) {
 				int createRapRes = CreateAccountingInfoRAPFile(
 					"More than one occurrence of group with same Exchange Rate Code within group Currency Conversion",
-					CURRENCY_CONVERSION_EXRATE_CODE_DUPLICATION, &asn_DEF_CurrencyConversionList, i+1);
+					CURRENCY_CONVERSION_EXRATE_CODE_DUPLICATION, asnItems);
 				return ( createRapRes >= 0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE );
 			}
 			else {
@@ -596,9 +591,11 @@ TAPValidationResult TAPValidator::ValidateAccountingInfo()
 
 	if (!(*m_transferBatch->accountingInfo->tapDecimalPlaces >= TAP_DECIMAL_VALID_FROM 
 			&& *m_transferBatch->accountingInfo->tapDecimalPlaces <= TAP_DECIMAL_VALID_TO)) {
+		vector<ErrContextAsnItem> asnItems;
+		asnItems.push_back(ErrContextAsnItem(&asn_DEF_TapDecimalPlaces, 0));
 		int createRapRes = CreateAccountingInfoRAPFile("TAP Decimal Places is out of range ( " + 
 			to_string((long long) *m_transferBatch->accountingInfo->tapDecimalPlaces) + " value given).", 
-			TAP_DECIMAL_OUT_OF_RANGE, &asn_DEF_TapDecimalPlaces, 0);
+			TAP_DECIMAL_OUT_OF_RANGE, asnItems);
 		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
 	}
 
@@ -606,16 +603,18 @@ TAPValidationResult TAPValidator::ValidateAccountingInfo()
 	if (m_transferBatch->accountingInfo->taxation) {
 		set<ExchangeRateCode_t> taxRateCodes;
 		for (int i = 0; i < m_transferBatch->accountingInfo->taxation->list.count; i++) {
+			vector<ErrContextAsnItem> asnItems;
+			asnItems.push_back(ErrContextAsnItem(&asn_DEF_TaxationList, i + 1));
 			if (!m_transferBatch->accountingInfo->taxation->list.array[i]->taxCode) {
 				int createRapRes = CreateAccountingInfoRAPFile(
 					"Mandatory item Tax Rate Code missing within group Taxation",
-					TAXATION_TAXRATE_CODE_MISSING, &asn_DEF_TaxationList, i+1);
+					TAXATION_TAXRATE_CODE_MISSING, asnItems);
 				return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
 			}
 			if (!m_transferBatch->accountingInfo->taxation->list.array[i]->taxType) {
 				int createRapRes = CreateAccountingInfoRAPFile(
 					"Mandatory item Exchange Rate Code missing within group Taxation",
-					TAXATION_TAX_TYPE_MISSING, &asn_DEF_TaxationList, i+1);
+					TAXATION_TAX_TYPE_MISSING, asnItems);
 				return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
 			}
 			// check tax code duplication
@@ -623,27 +622,33 @@ TAPValidationResult TAPValidator::ValidateAccountingInfo()
 					taxRateCodes.end()) {
 				int createRapRes = CreateAccountingInfoRAPFile(
 					"More than one occurrence of group with same Tax Rate Code within group Taxation",
-					CURRENCY_CONVERSION_EXRATE_CODE_DUPLICATION, &asn_DEF_TaxationList, i+1);
+					CURRENCY_CONVERSION_EXRATE_CODE_DUPLICATION, asnItems);
 				return ( createRapRes >= 0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE );
 			}
 			else {
 				taxRateCodes.insert(*m_transferBatch->accountingInfo->taxation->list.array[i]->taxCode);
 			}
-			long taxRate;
-			try {
-				taxRate = stol((char*)m_transferBatch->accountingInfo->taxation->list.array[i]->taxRate->buf, NULL);
-			}
-			catch(const std::invalid_argument& ia) {
-				// wrong file sequence number given
-				int createRapRes = CreateAccountingInfoRAPFile("Tax Rate is not a number (syntax error) at element " + to_string((long long)(i+1)), 
-					TAX_RATE_SYNTAX_ERROR, &asn_DEF_TaxationList, i+1);
-				return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
-			}
-	
-			if (!(taxRate >= TAX_RATE_VALID_FROM && taxRate <= TAX_RATE_VALID_TO)) {
-				int createRapRes = CreateAccountingInfoRAPFile("Tax Rate is out of range at element "+ to_string((long long)(i+1)), 
-					TAX_RATE_OUT_OF_RANGE, &asn_DEF_TaxationList, i+1, &asn_DEF_Taxation, 0, &asn_DEF_TaxRate, 0);
-				return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
+			if (m_transferBatch->accountingInfo->taxation->list.array[i]->taxRate) {
+				long taxRate;
+				try {
+					taxRate = stol((char*) m_transferBatch->accountingInfo->taxation->list.array[i]->taxRate->buf, NULL);
+				}
+				catch (const std::invalid_argument& ia) {
+					// wrong tax rate given
+					int createRapRes = CreateAccountingInfoRAPFile("Tax Rate is not a number (syntax error) at element " + to_string((long long) ( i + 1 )),
+						TAX_RATE_SYNTAX_ERROR, asnItems);
+					return ( createRapRes >= 0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE );
+				}
+
+				if (!( taxRate >= TAX_RATE_VALID_FROM && taxRate <= TAX_RATE_VALID_TO )) {
+					vector<ErrContextAsnItem> asnItems;
+					asnItems.push_back(ErrContextAsnItem(&asn_DEF_TaxationList, i + 1));
+					asnItems.push_back(ErrContextAsnItem(&asn_DEF_Taxation, 0));
+					asnItems.push_back(ErrContextAsnItem(&asn_DEF_TaxRate, 0));
+					int createRapRes = CreateAccountingInfoRAPFile("Tax Rate is out of range at element " + to_string((long long) ( i + 1 )),
+						TAX_RATE_OUT_OF_RANGE, asnItems);
+					return ( createRapRes >= 0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE );
+				}
 			}
 		}
 	}
@@ -652,7 +657,7 @@ TAPValidationResult TAPValidator::ValidateAccountingInfo()
 }
 
 
-int TAPValidator::CreateNetworkInfoRAPFile(string logMessage, int errorCode, asn_TYPE_descriptor_t* level3item, long level3itemOccurence)
+int TAPValidator::CreateNetworkInfoRAPFile(string logMessage, int errorCode, const vector<ErrContextAsnItem>& asnItems)
 {
 	log(LOG_ERROR, "Validating Network Info: " + logMessage + ". Creating RAP file");
 	ReturnDetail* returnDetail = (ReturnDetail*) calloc(1, sizeof(ReturnDetail));
@@ -671,25 +676,27 @@ int TAPValidator::CreateNetworkInfoRAPFile(string logMessage, int errorCode, asn
 	errorDetail->errorCode = errorCode;
 
 	// Fill Error Context List
+	int itemLevel = 1;
 	errorDetail->errorContext = (ErrorContextList*) calloc(1, sizeof(ErrorContextList));
 	ErrorContext* errorContext1level = (ErrorContext*) calloc(1, sizeof(ErrorContext));
 	errorContext1level->pathItemId = asn_DEF_TransferBatch.tags[0] >> 2; // 2 rightmost bits is TAG class at ASN1 compiler, remove it  
-	errorContext1level->itemLevel = 1;
+	errorContext1level->itemLevel = itemLevel++;
 	ASN_SEQUENCE_ADD(errorDetail->errorContext, errorContext1level);
 
 	ErrorContext* errorContext2level = (ErrorContext*) calloc(1, sizeof(ErrorContext));
 	errorContext2level->pathItemId = asn_DEF_NetworkInfo.tags[0] >> 2; // 2 rightmost bits is TAG class at ASN1 compiler, remove it  
-	errorContext2level->itemLevel = 2;
+	errorContext2level->itemLevel = itemLevel++;
 	ASN_SEQUENCE_ADD(errorDetail->errorContext, errorContext2level);
-	if (level3item) {
-		ErrorContext* errorContext3level = (ErrorContext*) calloc(1, sizeof(ErrorContext));
-		errorContext3level->pathItemId = level3item->tags[0] >> 2; // 2 rightmost bits is TAG class at ASN1 compiler, remove it  
-		errorContext3level->itemLevel = 3;
-		if (level3itemOccurence > 0) {
-			errorContext3level->itemOccurrence = (ItemOccurrence_t*) calloc(1, sizeof(ItemOccurrence_t));
-			*errorContext3level->itemOccurrence = level3itemOccurence;
+
+	for (auto it = asnItems.cbegin() ; it != asnItems.cend(); it++)	{
+		ErrorContext* errorContext = (ErrorContext*) calloc(1, sizeof(ErrorContext));
+		errorContext->pathItemId = (*it).m_asnType->tags[0] >> 2; // 2 rightmost bits is TAG class at ASN1 compiler, remove it  
+		errorContext->itemLevel = itemLevel++;
+		if ((*it).m_itemOccurence > 0) {
+			errorContext->itemOccurrence = (ItemOccurrence_t*) calloc(1, sizeof(ItemOccurrence_t));
+			*errorContext->itemOccurrence = (*it).m_itemOccurence;
 		}
-		ASN_SEQUENCE_ADD(errorDetail->errorContext, errorContext3level);
+		ASN_SEQUENCE_ADD(errorDetail->errorContext, errorContext);
 	}
 	ASN_SEQUENCE_ADD(&returnDetail->choice.fatalReturn.networkInfoError->errorDetail, errorDetail);
 
@@ -718,34 +725,36 @@ TAPValidationResult TAPValidator::ValidateNetworkInfo()
 	// check mandatory structures in Transfer Batch/Network Information
 	if (!m_transferBatch->networkInfo->utcTimeOffsetInfo) {
 		int createRapRes = CreateNetworkInfoRAPFile("utcTimeOffsetInfo is missing in Network Info",
-			NETWORK_UTC_TIMEOFFSET_MISSING, NULL, 0);
+			NETWORK_UTC_TIMEOFFSET_MISSING, NO_ASN_ITEMS);
 		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
 	}
 	if (!m_transferBatch->networkInfo->recEntityInfo) {
 		int createRapRes = CreateNetworkInfoRAPFile("recEntityInfo is missing in Network Info",
-			NETWORK_REC_ENTITY_MISSING, NULL, 0);
+			NETWORK_REC_ENTITY_MISSING, NO_ASN_ITEMS);
 		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
 	}
 	// Validating recording entities table
 	if (m_transferBatch->networkInfo->recEntityInfo) {
 		set<RecEntityCode_t> recEntityCodes;
 		for (int i = 0; i < m_transferBatch->networkInfo->recEntityInfo->list.count; i++) {
+			vector<ErrContextAsnItem> asnItems;
+			asnItems.push_back(ErrContextAsnItem(&asn_DEF_RecEntityInfoList, i + 1));
 			if (!m_transferBatch->networkInfo->recEntityInfo->list.array[i]->recEntityCode) {
 				int createRapRes = CreateNetworkInfoRAPFile(
 					"Mandatory item Recording Entity Code missing within group Network Information",
-					REC_ENTITY_CODE_MISSING, &asn_DEF_RecEntityInfoList, i+1);
+					REC_ENTITY_CODE_MISSING, asnItems);
 				return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
 			}
 			if (!m_transferBatch->networkInfo->recEntityInfo->list.array[i]->recEntityType) {
 				int createRapRes = CreateNetworkInfoRAPFile(
 					"Mandatory item Recording Entity Type missing within group Network Information",
-					REC_ENTITY_TYPE_MISSING, &asn_DEF_RecEntityInfoList, i+1);
+					REC_ENTITY_TYPE_MISSING, asnItems);
 				return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
 			}
 			if (!m_transferBatch->networkInfo->recEntityInfo->list.array[i]->recEntityId) {
 				int createRapRes = CreateNetworkInfoRAPFile(
 					"Mandatory item Recording Entity Indentification missing within group Network Information",
-					REC_ENTITY_IDENTIFICATION_MISSING, &asn_DEF_RecEntityInfoList, i+1);
+					REC_ENTITY_IDENTIFICATION_MISSING, asnItems);
 				return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
 			}
 			// check recording entity code duplication
@@ -753,7 +762,7 @@ TAPValidationResult TAPValidator::ValidateNetworkInfo()
 					recEntityCodes.end()) {
 				int createRapRes = CreateNetworkInfoRAPFile(
 					"More than one occurrence of group with same Recording Entity Code within group Recording Entity Information",
-					REC_ENTITY_CODE_DUPLICATION, &asn_DEF_RecEntityCodeList, i+1);
+					REC_ENTITY_CODE_DUPLICATION, asnItems);
 				return ( createRapRes >= 0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE );
 			}
 			else {
@@ -766,7 +775,7 @@ TAPValidationResult TAPValidator::ValidateNetworkInfo()
 }
 
 
-int TAPValidator::CreateAuditControlInfoRAPFile(string logMessage, int errorCode, asn_TYPE_descriptor_t* level3item)
+int TAPValidator::CreateAuditControlInfoRAPFile(string logMessage, int errorCode, const vector<ErrContextAsnItem>& asnItems)
 {
 	log(LOG_ERROR, "Validating Audit Control Info: " + logMessage + ". Creating RAP file");
 	ReturnDetail* returnDetail = (ReturnDetail*) calloc(1, sizeof(ReturnDetail));
@@ -803,22 +812,27 @@ int TAPValidator::CreateAuditControlInfoRAPFile(string logMessage, int errorCode
 	errorDetail->errorCode = errorCode;
 
 	// Fill Error Context List
+	int itemLevel = 1;
 	errorDetail->errorContext = (ErrorContextList*) calloc(1, sizeof(ErrorContextList));
 	ErrorContext* errorContext1level = (ErrorContext*) calloc(1, sizeof(ErrorContext));
 	errorContext1level->pathItemId = asn_DEF_TransferBatch.tags[0] >> 2; // 2 rightmost bits is TAG class at ASN1 compiler, remove it  
-	errorContext1level->itemLevel = 1;
+	errorContext1level->itemLevel = itemLevel++;
 	ASN_SEQUENCE_ADD(errorDetail->errorContext, errorContext1level);
 
 	ErrorContext* errorContext2level = (ErrorContext*) calloc(1, sizeof(ErrorContext));
 	errorContext2level->pathItemId = asn_DEF_AuditControlInfo.tags[0] >> 2; // 2 rightmost bits is TAG class at ASN1 compiler, remove it  
-	errorContext2level->itemLevel = 2;
+	errorContext2level->itemLevel = itemLevel++;
 	ASN_SEQUENCE_ADD(errorDetail->errorContext, errorContext2level);
 	
-	if (level3item) {
-		ErrorContext* errorContext3level = (ErrorContext*) calloc(1, sizeof(ErrorContext));
-		errorContext3level->pathItemId = level3item->tags[0] >> 2; // 2 rightmost bits is TAG class at ASN1 compiler, remove it  
-		errorContext3level->itemLevel = 3;
-		ASN_SEQUENCE_ADD(errorDetail->errorContext, errorContext3level);
+	for (auto it = asnItems.cbegin() ; it != asnItems.cend(); it++)	{
+		ErrorContext* errorContext = (ErrorContext*) calloc(1, sizeof(ErrorContext));
+		errorContext->pathItemId = (*it).m_asnType->tags[0] >> 2; // 2 rightmost bits is TAG class at ASN1 compiler, remove it  
+		errorContext->itemLevel = itemLevel++;
+		if ((*it).m_itemOccurence > 0) {
+			errorContext->itemOccurrence = (ItemOccurrence_t*) calloc(1, sizeof(ItemOccurrence_t));
+			*errorContext->itemOccurrence = (*it).m_itemOccurence;
+		}
+		ASN_SEQUENCE_ADD(errorDetail->errorContext, errorContext);
 	}
 	ASN_SEQUENCE_ADD(&returnDetail->choice.fatalReturn.auditControlInfoError->errorDetail, errorDetail);
 
@@ -856,28 +870,30 @@ TAPValidationResult TAPValidator::ValidateAuditControlInfo()
 	// check mandatory structures in Transfer Batch/Audit Control Information
 	if (!m_transferBatch->auditControlInfo->totalCharge) {
 		int createRapRes = CreateAuditControlInfoRAPFile("totalCharge is missing in Audit Control Info",
-			AUDIT_CTRL_TOTAL_CHARGE_MISSING, NULL);
+			AUDIT_CTRL_TOTAL_CHARGE_MISSING, NO_ASN_ITEMS);
 		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
 	}
 	if (!m_transferBatch->auditControlInfo->totalTaxValue) {
 		int createRapRes = CreateAuditControlInfoRAPFile("totalTaxValue is missing in Audit Control Info",
-			AUDIT_CTRL_TOTAL_TAX_VALUE_MISSING, NULL);
+			AUDIT_CTRL_TOTAL_TAX_VALUE_MISSING, NO_ASN_ITEMS);
 		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
 	}
 	if (!m_transferBatch->auditControlInfo->totalDiscountValue) {
 		int createRapRes = CreateAuditControlInfoRAPFile("totalDiscountValue is missing in Audit Control Info",
-			AUDIT_CTRL_TOTAL_DISCOUNT_MISSING, NULL);
+			AUDIT_CTRL_TOTAL_DISCOUNT_MISSING, NO_ASN_ITEMS);
 		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
 	}
 	if (!m_transferBatch->auditControlInfo->callEventDetailsCount) {
 		int createRapRes = CreateAuditControlInfoRAPFile("callEventDetailsCount is missing in Audit Control Info",
-			AUDIT_CTRL_CALL_COUNT_MISSING, NULL);
+			AUDIT_CTRL_CALL_COUNT_MISSING, NO_ASN_ITEMS);
 		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
 	}
 	if (*m_transferBatch->auditControlInfo->callEventDetailsCount != m_transferBatch->callEventDetails->list.count) {
+		vector<ErrContextAsnItem> asnItems;
+		asnItems.push_back(ErrContextAsnItem(&asn_DEF_CallEventDetailsCount, 0));
 		int createRapRes = CreateAuditControlInfoRAPFile(
 			"Audit Control Info/CallEventDetailsCount does not match the count of Call Event Details",
-			CALL_COUNT_MISMATCH, &asn_DEF_CallEventDetailsCount);
+			CALL_COUNT_MISMATCH, asnItems);
 		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
 	}
 	return TAP_VALID;
@@ -966,7 +982,7 @@ TAPValidationResult TAPValidator::ValidateTransferBatch()
 }
 
 
-int TAPValidator::CreateNotificationRAPFile(string logMessage, int errorCode, asn_TYPE_descriptor_t* level2item)
+int TAPValidator::CreateNotificationRAPFile(string logMessage, int errorCode, const vector<ErrContextAsnItem>& asnItems)
 {
 	log(LOG_ERROR, "Validating Notification: " + logMessage + ". Creating RAP file");
 	ReturnDetail* returnDetail = (ReturnDetail*) calloc(1, sizeof(ReturnDetail));
@@ -978,17 +994,22 @@ int TAPValidator::CreateNotificationRAPFile(string logMessage, int errorCode, as
 	errorDetail->errorCode = errorCode;
 
 	// Fill Error Context List
+	int itemLevel = 1;
 	errorDetail->errorContext = (ErrorContextList*) calloc(1, sizeof(ErrorContextList));
 	ErrorContext* errorContext1level = (ErrorContext*) calloc(1, sizeof(ErrorContext));
 	errorContext1level->pathItemId = asn_DEF_Notification.tags[0] >> 2; // 2 rightmost bits is TAG class at ASN1 compiler, remove it
-	errorContext1level->itemLevel = 1;
+	errorContext1level->itemLevel = itemLevel++;
 	ASN_SEQUENCE_ADD(errorDetail->errorContext, errorContext1level);
 
-	if (level2item) {
-		ErrorContext* errorContext2level = (ErrorContext*) calloc(1, sizeof(ErrorContext));
-		errorContext2level->pathItemId = level2item->tags[0] >> 2; // 2 rightmost bits is TAG class at ASN1 compiler, remove it  
-		errorContext2level->itemLevel = 2;
-		ASN_SEQUENCE_ADD(errorDetail->errorContext, errorContext2level);
+	for (auto it = asnItems.cbegin() ; it != asnItems.cend(); it++)	{
+		ErrorContext* errorContext = (ErrorContext*) calloc(1, sizeof(ErrorContext));
+		errorContext->pathItemId = (*it).m_asnType->tags[0] >> 2; // 2 rightmost bits is TAG class at ASN1 compiler, remove it  
+		errorContext->itemLevel = itemLevel++;
+		if ((*it).m_itemOccurence > 0) {
+			errorContext->itemOccurrence = (ItemOccurrence_t*) calloc(1, sizeof(ItemOccurrence_t));
+			*errorContext->itemOccurrence = (*it).m_itemOccurence;
+		}
+		ASN_SEQUENCE_ADD(errorDetail->errorContext, errorContext);
 	}
 	ASN_SEQUENCE_ADD(&returnDetail->choice.fatalReturn.notificationError->errorDetail, errorDetail);
 	
@@ -1023,13 +1044,17 @@ TAPValidationResult TAPValidator::ValidateNotification()
 	}
 	catch(const std::invalid_argument& ia) {
 		// wrong file sequence number given
+		vector<ErrContextAsnItem> asnItems;
+		asnItems.push_back(ErrContextAsnItem(&asn_DEF_FileSequenceNumber, 0));
 		int createRapRes = CreateNotificationRAPFile("fileSequenceNumber is not a number (syntax error)", 
-			FILE_SEQ_NUM_SYNTAX_ERROR, &asn_DEF_FileSequenceNumber);
+			FILE_SEQ_NUM_SYNTAX_ERROR, asnItems);
 		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
 	}
 	if (!(fileSeqNum >= START_TAP_SEQUENCE_NUM && fileSeqNum <= END_TAP_SEQUENCE_NUM)) {
+		vector<ErrContextAsnItem> asnItems;
+		asnItems.push_back(ErrContextAsnItem(&asn_DEF_FileSequenceNumber, 0));
 		int createRapRes = CreateNotificationRAPFile("fileSequenceNumber is out of range", 
-			FILE_SEQ_NUM_OUT_OF_RANGE, &asn_DEF_FileSequenceNumber);
+			FILE_SEQ_NUM_OUT_OF_RANGE, asnItems);
 		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
 	}
 	// TODO: add duplication checks for file seq num
