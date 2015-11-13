@@ -973,18 +973,27 @@ int LoadTAPFileToDB( unsigned char* buffer, long dataLen, long fileID, bool bPri
 		}
 
 		otl_nocommit_stream otlStream;
-		
+		TAPValidator tapValidator(otlConnect, config);
+		TAPValidationResult validationRes = tapValidator.Validate(dataInterchange);
+		if (validationRes == VALIDATION_IMPOSSIBLE) {
+			log(LOG_ERROR, "Unable to validate TAP file. File is not loaded.");
+			return TL_TAP_NOT_VALIDATED;
+		}
+
 		if (dataInterchange->present == DataInterChange_PR_notification) {
 			// Processing Notification (empty TAP file, i.e. with no call records)
 			otlStream.open( 1 /*stream buffer size in logical rows*/, 
-				"insert into BILLING.TAP3_FILE (FILE_ID, FILENAME, SENDER, RECIPIENT, SEQUENCE_NUMBER , CREATION_STAMP, CREATION_UTCOFF,\
-				CUTOFF_STAMP, CUTOFF_UTCOFF, AVAILABLE_STAMP, AVAILABLE_UTCOFF, LOAD_TIME, NOTIFICATION, STATUS, TAP_VERSION, TAP_RELEASE, FILE_TYPE_INDICATOR) \
-				values (\
-				  :hfileid /*long,in*/, :filename/*char[255],in*/, :sender/*char[20],in*/, :recipient/*char[20],in*/, :seq_num/*char[10],in*/,\
-				  to_date(:creation_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :creation_utcoff /* char[10],in */,\
-				  to_date(:cutoff_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :cutoff_utcoff /* char[10],in */,\
-				  				  to_date(:available_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :available_utcoff /* char[10],in */, sysdate, 1 /*notification*/, :status /*long,in*/,\
-				  :tapVer /*long,in*/, :specif /*long,in*/, :filetype /*char[5],in*/ )", otlConnect); 
+				"insert into BILLING.TAP3_FILE (FILE_ID, FILENAME, SENDER, RECIPIENT, SEQUENCE_NUMBER , CREATION_STAMP, CREATION_UTCOFF,"
+				"CUTOFF_STAMP, CUTOFF_UTCOFF, AVAILABLE_STAMP, AVAILABLE_UTCOFF, LOAD_TIME, NOTIFICATION, TAP_VERSION, TAP_RELEASE, "
+				"FILE_TYPE_INDICATOR, STATUS, CANCEL_RAP_FILE_SEQNUM, CANCEL_RAP_FILE_ID) "
+				"values ("
+				":hfileid /*long,in*/, :filename/*char[255],in*/, :sender/*char[20],in*/, :recipient/*char[20],in*/, :seq_num/*char[10],in*/,"
+				"to_date(:creation_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :creation_utcoff /* char[10],in*/,"
+				"to_date(:cutoff_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :cutoff_utcoff /* char[10],in*/,"
+				"to_date(:available_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :available_utcoff /* char[10],in*/,"
+				"sysdate, 1 /*notification*/, "
+				":tapVer /*long,in*/, :specif /*long,in*/, :filetype /*char[5],in*/, :status /*long,in*/,"
+				":cancel_rap_file_seqnum /*char[10],in*/, :cancel_rap_file_id /*long,in*/)", otlConnect); 
 			otlStream
 				<< fileID
 				<< pShortName 
@@ -997,28 +1006,27 @@ int LoadTAPFileToDB( unsigned char* buffer, long dataLen, long fileID, bool bPri
 				<< dataInterchange->choice.notification.transferCutOffTimeStamp->utcTimeOffset->buf
 				<< dataInterchange->choice.notification.fileAvailableTimeStamp->localTimeStamp->buf
 				<< dataInterchange->choice.notification.fileAvailableTimeStamp->utcTimeOffset->buf
-				<< (long) INFILE_STATUS_NEW
 				<< *dataInterchange->choice.notification.specificationVersionNumber
 				<< *dataInterchange->choice.notification.releaseVersionNumber
-				<< (dataInterchange->choice.notification.fileTypeIndicator ? (const char*) dataInterchange->choice.notification.fileTypeIndicator->buf : "")
-				;
+				<< (dataInterchange->choice.notification.fileTypeIndicator ? (const char*) dataInterchange->choice.notification.fileTypeIndicator->buf : "");
+			if (validationRes == FATAL_ERROR) 
+				otlStream 
+					<< (long) INFILE_STATUS_FATAL
+					<< tapValidator.GetRapSequenceNum()
+					<< tapValidator.GetRapFileID();
+			else
+				otlStream 
+					<< (long) INFILE_STATUS_NEW
+					<< otl_null()
+					<< otl_null();
+			
 			otlStream.flush();
 			otlStream.close();
 
 			return TL_OK;
 		}
 
-		// Procesing Transfer Batch
-		
-		TAPValidator tapValidator(otlConnect, config);
-		TAPValidationResult validationRes = tapValidator.Validate(dataInterchange);
-
-		if (validationRes == VALIDATION_IMPOSSIBLE) {
-			log(LOG_ERROR, "Unable to validate TAP file. File is not loaded.");
-			return TL_TAP_NOT_VALIDATED;
-		}
-		
-		// REGISTER TAP FILE IN DB CODE
+		// Processing Transfer Batch
 		otlStream.open( 1 /*stream buffer size in logical rows*/, 
 			"insert into BILLING.TAP3_FILE (FILE_ID, FILENAME, SENDER, RECIPIENT, SEQUENCE_NUMBER , CREATION_STAMP, CREATION_UTCOFF,\
 			CUTOFF_STAMP, CUTOFF_UTCOFF, AVAILABLE_STAMP, AVAILABLE_UTCOFF, LOCAL_CURRENCY, LOAD_TIME, EARLIEST_TIME, EARLIEST_UTCOFF, \

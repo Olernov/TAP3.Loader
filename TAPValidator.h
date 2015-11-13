@@ -1,5 +1,15 @@
 // See class description at TAPValidator.cpp
 
+enum TAPConstants
+{
+	START_TAP_SEQUENCE_NUM = 1,
+	END_TAP_SEQUENCE_NUM = 99999,
+	TAP_DECIMAL_VALID_FROM = 0,
+	TAP_DECIMAL_VALID_TO = 6,
+	TAX_RATE_VALID_FROM = 0L,
+	TAX_RATE_VALID_TO = 9999999L
+};
+
 enum TAPValidationResult
 {
 	TAP_VALID = 0,
@@ -21,6 +31,9 @@ enum TAPValidationErrors
 	BATCH_CTRL_SPEC_VERSION_MISSING = 34,
 	BATCH_CTRL_TRANSFER_CUTOFF_MISSING = 36,
 
+	FILE_SEQ_NUM_SYNTAX_ERROR = 10,
+	FILE_SEQ_NUM_OUT_OF_RANGE = 20,
+
 	ACCOUNTING_TAXATION_MISSING = 30,
 	ACCOUNTING_DISCOUNTING_MISSING = 31,
 	ACCOUNTING_LOCAL_CURRENCY_MISSING = 32,
@@ -31,9 +44,20 @@ enum TAPValidationErrors
 	CURRENCY_CONVERSION_NUM_OF_DEC_PLACES_MISSING = 31,
 	CURRENCY_CONVERSION_EXCHANGE_RATE_MISSING = 33,
 	CURRENCY_CONVERSION_EXRATE_CODE_DUPLICATION =34,
+	TAP_DECIMAL_OUT_OF_RANGE = 20,
+	TAXATION_TAXRATE_CODE_MISSING = 30,
+	TAXATION_TAX_TYPE_MISSING = 31,
+	TAXATION_TAX_CODE_DUPLICATION =33,
+	TAX_RATE_SYNTAX_ERROR = 10,
+	TAX_RATE_OUT_OF_RANGE = 20,
 
 	NETWORK_UTC_TIMEOFFSET_MISSING = 30,
 	NETWORK_REC_ENTITY_MISSING = 33,
+
+	REC_ENTITY_CODE_MISSING = 30,
+	REC_ENTITY_TYPE_MISSING = 31,
+	REC_ENTITY_IDENTIFICATION_MISSING = 32,
+	REC_ENTITY_CODE_DUPLICATION = 33,
 
 	AUDIT_CTRL_TOTAL_CHARGE_MISSING = 30,
 	AUDIT_CTRL_TOTAL_TAX_VALUE_MISSING = 31,
@@ -83,9 +107,12 @@ private:
 	bool BatchContainsPositiveCharges();
 
 	int CreateTransferBatchRAPFile(string logMessage, int errorCode);
-	int CreateBatchControlInfoRAPFile(string logMessage, int errorCode);
-	int CreateAccountingInfoRAPFile(string logMessage, int errorCode, asn_TYPE_descriptor_t* level3item);
-	int CreateNetworkInfoRAPFile(string logMessage, int errorCode);
+	int CreateNotificationRAPFile(string logMessage, int errorCode, asn_TYPE_descriptor_t* level2item);
+	int CreateBatchControlInfoRAPFile(string logMessage, int errorCode, asn_TYPE_descriptor_t* level3item);
+	int CreateAccountingInfoRAPFile(string logMessage, int errorCode, asn_TYPE_descriptor_t* level3item, long level3itemOccurence,
+		asn_TYPE_descriptor_t* level4item, long level4itemOccurence,
+		asn_TYPE_descriptor_t* level5item, long level5itemOccurence);
+	int CreateNetworkInfoRAPFile(string logMessage, int errorCode, asn_TYPE_descriptor_t* level3item, long level3itemOccurence);
 	int CreateAuditControlInfoRAPFile(string logMessage, int errorCode, asn_TYPE_descriptor_t* level3item);
 
 	TAPValidationResult ValidateBatchControlInfo();

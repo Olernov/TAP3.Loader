@@ -300,41 +300,7 @@ bool TAPValidator::BatchContainsPositiveCharges()
 }
 
 
-int TAPValidator::CreateTransferBatchRAPFile(string logMessage, int errorCode)
-{
-	log(LOG_ERROR, "Validating Transfer Batch: " + logMessage + ". Creating RAP file");
-	ReturnDetail* returnDetail = (ReturnDetail*) calloc(1, sizeof(ReturnDetail));
-	returnDetail->present = ReturnDetail_PR_fatalReturn;
-	OCTET_STRING_fromBuf(&returnDetail->choice.fatalReturn.fileSequenceNumber, (const char*)m_transferBatch->batchControlInfo->fileSequenceNumber->buf, 
-		m_transferBatch->batchControlInfo->fileSequenceNumber->size);
-	returnDetail->choice.fatalReturn.transferBatchError = (TransferBatchError*) calloc(1, sizeof(TransferBatchError));
-	ErrorDetail* errorDetail = (ErrorDetail*) calloc(1, sizeof(ErrorDetail));
-	errorDetail->errorCode = errorCode;
-
-	// Fill Error Context List
-	errorDetail->errorContext = (ErrorContextList*) calloc(1, sizeof(ErrorContextList));
-	ErrorContext* errorContext1level = (ErrorContext*) calloc(1, sizeof(ErrorContext));
-	errorContext1level->pathItemId = asn_DEF_TransferBatch.tags[0] >> 2; // 2 rightmost bits is TAG class at ASN1 compiler, remove it
-	errorContext1level->itemLevel = 1;
-	ASN_SEQUENCE_ADD(errorDetail->errorContext, errorContext1level);
-	ASN_SEQUENCE_ADD(&returnDetail->choice.fatalReturn.transferBatchError->errorDetail, errorDetail);
-	
-	ReturnBatch* returnBatch = (ReturnBatch*) calloc(1, sizeof(ReturnBatch));
-	RAPFile rapFile(m_otlConnect, m_config);
-	
-	assert(m_transferBatch->batchControlInfo->sender);
-	assert(m_transferBatch->batchControlInfo->recipient);
-	assert(m_transferBatch->batchControlInfo->fileAvailableTimeStamp);
-	int loadRes = rapFile.CreateRAPFile(returnBatch, returnDetail, (char*)m_transferBatch->batchControlInfo->sender->buf,
-		(char*) m_transferBatch->batchControlInfo->recipient->buf, (char*) m_transferBatch->batchControlInfo->fileAvailableTimeStamp->localTimeStamp->buf,
-		(m_transferBatch->batchControlInfo->fileTypeIndicator ? (char*) m_transferBatch->batchControlInfo->fileTypeIndicator->buf : ""),
-		m_rapFileID, m_rapSequenceNum);
-	ASN_STRUCT_FREE(asn_DEF_ReturnBatch, returnBatch);
-	return loadRes;
-}
-
-
-int TAPValidator::CreateBatchControlInfoRAPFile(string logMessage, int errorCode)
+int TAPValidator::CreateBatchControlInfoRAPFile(string logMessage, int errorCode, asn_TYPE_descriptor_t* level3item)
 {
 	log(LOG_ERROR, "Validating Batch Control Info: " + logMessage + ". Creating RAP file ");
 	ReturnDetail* returnDetail = (ReturnDetail*) calloc(1, sizeof(ReturnDetail));
@@ -382,6 +348,13 @@ int TAPValidator::CreateBatchControlInfoRAPFile(string logMessage, int errorCode
 	errorContext2level->pathItemId = asn_DEF_BatchControlInfo.tags[0] >> 2; // 2 rightmost bits is TAG class at ASN1 compiler, remove it  
 	errorContext2level->itemLevel = 2;
 	ASN_SEQUENCE_ADD(errorDetail->errorContext, errorContext2level);
+
+	if (level3item) {
+		ErrorContext* errorContext3level = (ErrorContext*) calloc(1, sizeof(ErrorContext));
+		errorContext3level->pathItemId = level3item->tags[0] >> 2; // 2 rightmost bits is TAG class at ASN1 compiler, remove it  
+		errorContext3level->itemLevel = 3;
+		ASN_SEQUENCE_ADD(errorDetail->errorContext, errorContext3level);
+	}
 	ASN_SEQUENCE_ADD(&returnDetail->choice.fatalReturn.batchControlError->errorDetail, errorDetail);
 
 	ReturnBatch* returnBatch = (ReturnBatch*) calloc(1, sizeof(ReturnBatch));
@@ -413,7 +386,52 @@ int TAPValidator::CreateBatchControlInfoRAPFile(string logMessage, int errorCode
 }
 
 
-int TAPValidator::CreateAccountingInfoRAPFile(string logMessage, int errorCode, asn_TYPE_descriptor_t* level3item)
+TAPValidationResult TAPValidator::ValidateBatchControlInfo()
+{
+	if (!m_transferBatch->batchControlInfo->sender || !m_transferBatch->batchControlInfo->recipient || 
+			!m_transferBatch->batchControlInfo->fileSequenceNumber) {
+		log(LOG_ERROR, "Validation: Sender, Recipient or FileSequenceNumber is missing in Batch Control Info. Unable to create RAP file.");
+		return VALIDATION_IMPOSSIBLE;
+	}
+	if (!m_transferBatch->batchControlInfo->fileAvailableTimeStamp) {
+		int createRapRes = CreateBatchControlInfoRAPFile("fileAvailableTimeStamp is missing in Batch Control Info", 
+			BATCH_CTRL_FILE_AVAIL_TIMESTAMP_MISSING, NULL);
+		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
+	}
+	if (!m_transferBatch->batchControlInfo->specificationVersionNumber) {
+		int createRapRes = CreateBatchControlInfoRAPFile("specificationVersionNumber is missing in Batch Control Info", 
+			BATCH_CTRL_SPEC_VERSION_MISSING, NULL);
+		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
+	}
+	if (!m_transferBatch->batchControlInfo->transferCutOffTimeStamp) {
+		int createRapRes = CreateBatchControlInfoRAPFile("transferCutOffTimeStamp is missing in Batch Control Info", 
+			BATCH_CTRL_TRANSFER_CUTOFF_MISSING, NULL);
+		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
+	}
+
+	int fileSeqNum;
+	try {
+		fileSeqNum = stoi((char*)m_transferBatch->batchControlInfo->fileSequenceNumber->buf, NULL);
+	}
+	catch(const std::invalid_argument& ia) {
+		// wrong file sequence number given
+		int createRapRes = CreateBatchControlInfoRAPFile("fileSequenceNumber is not a number (syntax error)", 
+			FILE_SEQ_NUM_SYNTAX_ERROR, &asn_DEF_FileSequenceNumber);
+		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
+	}
+	
+	if (!(fileSeqNum >= START_TAP_SEQUENCE_NUM && fileSeqNum <= END_TAP_SEQUENCE_NUM)) {
+		int createRapRes = CreateBatchControlInfoRAPFile("fileSequenceNumber is out of range", 
+			FILE_SEQ_NUM_OUT_OF_RANGE, &asn_DEF_FileSequenceNumber);
+		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
+	}
+
+	return TAP_VALID;
+}
+
+
+int TAPValidator::CreateAccountingInfoRAPFile(string logMessage, int errorCode, asn_TYPE_descriptor_t* level3item, long level3itemOccurence, 
+		asn_TYPE_descriptor_t* level4item = NULL, long level4itemOccurence = 0, asn_TYPE_descriptor_t* level5item = NULL, long level5itemOccurence = 0)
 {
 	log(LOG_ERROR, "Validating Accounting Info: " + logMessage + ". Creating RAP file");
 	ReturnDetail* returnDetail = (ReturnDetail*) calloc(1, sizeof(ReturnDetail));
@@ -455,7 +473,31 @@ int TAPValidator::CreateAccountingInfoRAPFile(string logMessage, int errorCode, 
 		ErrorContext* errorContext3level = (ErrorContext*) calloc(1, sizeof(ErrorContext));
 		errorContext3level->pathItemId = level3item->tags[0] >> 2; // 2 rightmost bits is TAG class at ASN1 compiler, remove it  
 		errorContext3level->itemLevel = 3;
+		if (level3itemOccurence > 0) {
+			errorContext3level->itemOccurrence = (ItemOccurrence_t*) calloc(1, sizeof(ItemOccurrence_t));
+			*errorContext3level->itemOccurrence = level3itemOccurence;
+		}
 		ASN_SEQUENCE_ADD(errorDetail->errorContext, errorContext3level);
+	}
+	if (level4item) {
+		ErrorContext* errorContext4level = (ErrorContext*) calloc(1, sizeof(ErrorContext));
+		errorContext4level->pathItemId = level4item->tags[0] >> 2; // 2 rightmost bits is TAG class at ASN1 compiler, remove it  
+		errorContext4level->itemLevel = 4;
+		if (level4itemOccurence > 0) {
+			errorContext4level->itemOccurrence = (ItemOccurrence_t*) calloc(1, sizeof(ItemOccurrence_t));
+			*errorContext4level->itemOccurrence = level4itemOccurence;
+		}
+		ASN_SEQUENCE_ADD(errorDetail->errorContext, errorContext4level);
+	}
+	if (level5item) {
+		ErrorContext* errorContext5level = (ErrorContext*) calloc(1, sizeof(ErrorContext));
+		errorContext5level->pathItemId = level5item->tags[0] >> 2; // 2 rightmost bits is TAG class at ASN1 compiler, remove it  
+		errorContext5level->itemLevel = 5;
+		if (level5itemOccurence > 0) {
+			errorContext5level->itemOccurrence = (ItemOccurrence_t*) calloc(1, sizeof(ItemOccurrence_t));
+			*errorContext5level->itemOccurrence = level5itemOccurence;
+		}
+		ASN_SEQUENCE_ADD(errorDetail->errorContext, errorContext5level);
 	}
 	ASN_SEQUENCE_ADD(&returnDetail->choice.fatalReturn.accountingInfoError->errorDetail, errorDetail);
 
@@ -483,7 +525,134 @@ int TAPValidator::CreateAccountingInfoRAPFile(string logMessage, int errorCode, 
 }
 
 
-int TAPValidator::CreateNetworkInfoRAPFile(string logMessage, int errorCode)
+TAPValidationResult TAPValidator::ValidateAccountingInfo()
+{
+	if (!m_transferBatch->accountingInfo->localCurrency) {
+		int createRapRes = CreateAccountingInfoRAPFile("localCurrency is missing in Accounting Info", 
+			ACCOUNTING_LOCAL_CURRENCY_MISSING, NULL, 0);
+		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
+	}
+	if (!m_transferBatch->accountingInfo->tapDecimalPlaces) {
+		int createRapRes = CreateAccountingInfoRAPFile("tapDecimalPlaces is missing in Accounting Info", 
+			ACCOUNTING_TAP_DECIMAL_PLACES_MISSING, NULL, 0);
+		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
+	}
+	if (!m_transferBatch->accountingInfo->taxation && BatchContainsTaxes()) {
+		int createRapRes = CreateAccountingInfoRAPFile(
+			"taxation group is missing in Accounting Info and batch contains taxes", 
+			ACCOUNTING_TAXATION_MISSING, NULL, 0);
+		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
+	}
+	if (!m_transferBatch->accountingInfo->discounting && BatchContainsDiscounts()) {
+		int createRapRes = CreateAccountingInfoRAPFile(
+			"discounting group is missing in Accounting Info and batch contains discounts", 
+			ACCOUNTING_DISCOUNTING_MISSING, NULL, 0);
+		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
+	}
+	if (!m_transferBatch->accountingInfo->currencyConversionInfo && BatchContainsPositiveCharges()) {
+		int createRapRes = CreateAccountingInfoRAPFile(
+			"currencyConversion group is missing in Accounting Info and batch contains charges greater than 0",
+			ACCOUNTING_CURRENCY_CONVERSION_MISSING, NULL, 0);
+		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
+	}
+	// Validating currency conversion table
+	if (m_transferBatch->accountingInfo->currencyConversionInfo) {
+		set<ExchangeRateCode_t> exchangeRateCodes;
+		for (int i = 0; i < m_transferBatch->accountingInfo->currencyConversionInfo->list.count; i++) {
+			if (!m_transferBatch->accountingInfo->currencyConversionInfo->list.array[i]->exchangeRateCode) {
+				int createRapRes = CreateAccountingInfoRAPFile(
+					"Mandatory item Exchange Rate Code missing within group Currency Conversion",
+					CURRENCY_CONVERSION_EXRATE_CODE_MISSING, &asn_DEF_CurrencyConversionList, i+1);
+				return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
+			}
+			if (!m_transferBatch->accountingInfo->currencyConversionInfo->list.array[i]->numberOfDecimalPlaces) {
+				int createRapRes = CreateAccountingInfoRAPFile(
+					"Mandatory item Exchange Rate Code missing within group Currency Conversion",
+					CURRENCY_CONVERSION_NUM_OF_DEC_PLACES_MISSING, &asn_DEF_CurrencyConversionList, i+1);
+				return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
+			}
+			if (!m_transferBatch->accountingInfo->currencyConversionInfo->list.array[i]->exchangeRate) {
+				int createRapRes = CreateAccountingInfoRAPFile(
+					"Mandatory item Exchange Rate Code missing within group Currency Conversion",
+					CURRENCY_CONVERSION_EXCHANGE_RATE_MISSING, &asn_DEF_CurrencyConversionList, i+1);
+				return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
+			}
+			// check exchange rate code duplication
+			if (exchangeRateCodes.find(*m_transferBatch->accountingInfo->currencyConversionInfo->list.array[i]->exchangeRateCode) !=
+					exchangeRateCodes.end()) {
+				int createRapRes = CreateAccountingInfoRAPFile(
+					"More than one occurrence of group with same Exchange Rate Code within group Currency Conversion",
+					CURRENCY_CONVERSION_EXRATE_CODE_DUPLICATION, &asn_DEF_CurrencyConversionList, i+1);
+				return ( createRapRes >= 0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE );
+			}
+			else {
+				exchangeRateCodes.insert(*m_transferBatch->accountingInfo->currencyConversionInfo->list.array[i]->exchangeRateCode);
+			}
+			// check exchange rate code
+			// TODO: add checks
+			// ...
+		}
+	}
+
+	if (!(*m_transferBatch->accountingInfo->tapDecimalPlaces >= TAP_DECIMAL_VALID_FROM 
+			&& *m_transferBatch->accountingInfo->tapDecimalPlaces <= TAP_DECIMAL_VALID_TO)) {
+		int createRapRes = CreateAccountingInfoRAPFile("TAP Decimal Places is out of range ( " + 
+			to_string((long long) *m_transferBatch->accountingInfo->tapDecimalPlaces) + " value given).", 
+			TAP_DECIMAL_OUT_OF_RANGE, &asn_DEF_TapDecimalPlaces, 0);
+		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
+	}
+
+	// Validating taxation table
+	if (m_transferBatch->accountingInfo->taxation) {
+		set<ExchangeRateCode_t> taxRateCodes;
+		for (int i = 0; i < m_transferBatch->accountingInfo->taxation->list.count; i++) {
+			if (!m_transferBatch->accountingInfo->taxation->list.array[i]->taxCode) {
+				int createRapRes = CreateAccountingInfoRAPFile(
+					"Mandatory item Tax Rate Code missing within group Taxation",
+					TAXATION_TAXRATE_CODE_MISSING, &asn_DEF_TaxationList, i+1);
+				return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
+			}
+			if (!m_transferBatch->accountingInfo->taxation->list.array[i]->taxType) {
+				int createRapRes = CreateAccountingInfoRAPFile(
+					"Mandatory item Exchange Rate Code missing within group Taxation",
+					TAXATION_TAX_TYPE_MISSING, &asn_DEF_TaxationList, i+1);
+				return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
+			}
+			// check tax code duplication
+			if (taxRateCodes.find(*m_transferBatch->accountingInfo->taxation->list.array[i]->taxCode) !=
+					taxRateCodes.end()) {
+				int createRapRes = CreateAccountingInfoRAPFile(
+					"More than one occurrence of group with same Tax Rate Code within group Taxation",
+					CURRENCY_CONVERSION_EXRATE_CODE_DUPLICATION, &asn_DEF_TaxationList, i+1);
+				return ( createRapRes >= 0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE );
+			}
+			else {
+				taxRateCodes.insert(*m_transferBatch->accountingInfo->taxation->list.array[i]->taxCode);
+			}
+			long taxRate;
+			try {
+				taxRate = stol((char*)m_transferBatch->accountingInfo->taxation->list.array[i]->taxRate->buf, NULL);
+			}
+			catch(const std::invalid_argument& ia) {
+				// wrong file sequence number given
+				int createRapRes = CreateAccountingInfoRAPFile("Tax Rate is not a number (syntax error) at element " + to_string((long long)(i+1)), 
+					TAX_RATE_SYNTAX_ERROR, &asn_DEF_TaxationList, i+1);
+				return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
+			}
+	
+			if (!(taxRate >= TAX_RATE_VALID_FROM && taxRate <= TAX_RATE_VALID_TO)) {
+				int createRapRes = CreateAccountingInfoRAPFile("Tax Rate is out of range at element "+ to_string((long long)(i+1)), 
+					TAX_RATE_OUT_OF_RANGE, &asn_DEF_TaxationList, i+1, &asn_DEF_Taxation, 0, &asn_DEF_TaxRate, 0);
+				return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
+			}
+		}
+	}
+
+	return TAP_VALID;
+}
+
+
+int TAPValidator::CreateNetworkInfoRAPFile(string logMessage, int errorCode, asn_TYPE_descriptor_t* level3item, long level3itemOccurence)
 {
 	log(LOG_ERROR, "Validating Network Info: " + logMessage + ". Creating RAP file");
 	ReturnDetail* returnDetail = (ReturnDetail*) calloc(1, sizeof(ReturnDetail));
@@ -512,6 +681,16 @@ int TAPValidator::CreateNetworkInfoRAPFile(string logMessage, int errorCode)
 	errorContext2level->pathItemId = asn_DEF_NetworkInfo.tags[0] >> 2; // 2 rightmost bits is TAG class at ASN1 compiler, remove it  
 	errorContext2level->itemLevel = 2;
 	ASN_SEQUENCE_ADD(errorDetail->errorContext, errorContext2level);
+	if (level3item) {
+		ErrorContext* errorContext3level = (ErrorContext*) calloc(1, sizeof(ErrorContext));
+		errorContext3level->pathItemId = level3item->tags[0] >> 2; // 2 rightmost bits is TAG class at ASN1 compiler, remove it  
+		errorContext3level->itemLevel = 3;
+		if (level3itemOccurence > 0) {
+			errorContext3level->itemOccurrence = (ItemOccurrence_t*) calloc(1, sizeof(ItemOccurrence_t));
+			*errorContext3level->itemOccurrence = level3itemOccurence;
+		}
+		ASN_SEQUENCE_ADD(errorDetail->errorContext, errorContext3level);
+	}
 	ASN_SEQUENCE_ADD(&returnDetail->choice.fatalReturn.networkInfoError->errorDetail, errorDetail);
 
 	ReturnBatch* returnBatch = (ReturnBatch*) calloc(1, sizeof(ReturnBatch));
@@ -531,6 +710,59 @@ int TAPValidator::CreateNetworkInfoRAPFile(string logMessage, int errorCode)
 	ASN_STRUCT_FREE(asn_DEF_ReturnBatch, returnBatch);
 
 	return loadRes;
+}
+
+
+TAPValidationResult TAPValidator::ValidateNetworkInfo()
+{
+	// check mandatory structures in Transfer Batch/Network Information
+	if (!m_transferBatch->networkInfo->utcTimeOffsetInfo) {
+		int createRapRes = CreateNetworkInfoRAPFile("utcTimeOffsetInfo is missing in Network Info",
+			NETWORK_UTC_TIMEOFFSET_MISSING, NULL, 0);
+		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
+	}
+	if (!m_transferBatch->networkInfo->recEntityInfo) {
+		int createRapRes = CreateNetworkInfoRAPFile("recEntityInfo is missing in Network Info",
+			NETWORK_REC_ENTITY_MISSING, NULL, 0);
+		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
+	}
+	// Validating recording entities table
+	if (m_transferBatch->networkInfo->recEntityInfo) {
+		set<RecEntityCode_t> recEntityCodes;
+		for (int i = 0; i < m_transferBatch->networkInfo->recEntityInfo->list.count; i++) {
+			if (!m_transferBatch->networkInfo->recEntityInfo->list.array[i]->recEntityCode) {
+				int createRapRes = CreateNetworkInfoRAPFile(
+					"Mandatory item Recording Entity Code missing within group Network Information",
+					REC_ENTITY_CODE_MISSING, &asn_DEF_RecEntityInfoList, i+1);
+				return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
+			}
+			if (!m_transferBatch->networkInfo->recEntityInfo->list.array[i]->recEntityType) {
+				int createRapRes = CreateNetworkInfoRAPFile(
+					"Mandatory item Recording Entity Type missing within group Network Information",
+					REC_ENTITY_TYPE_MISSING, &asn_DEF_RecEntityInfoList, i+1);
+				return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
+			}
+			if (!m_transferBatch->networkInfo->recEntityInfo->list.array[i]->recEntityId) {
+				int createRapRes = CreateNetworkInfoRAPFile(
+					"Mandatory item Recording Entity Indentification missing within group Network Information",
+					REC_ENTITY_IDENTIFICATION_MISSING, &asn_DEF_RecEntityInfoList, i+1);
+				return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
+			}
+			// check recording entity code duplication
+			if (recEntityCodes.find(*m_transferBatch->networkInfo->recEntityInfo->list.array[i]->recEntityCode) !=
+					recEntityCodes.end()) {
+				int createRapRes = CreateNetworkInfoRAPFile(
+					"More than one occurrence of group with same Recording Entity Code within group Recording Entity Information",
+					REC_ENTITY_CODE_DUPLICATION, &asn_DEF_RecEntityCodeList, i+1);
+				return ( createRapRes >= 0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE );
+			}
+			else {
+				recEntityCodes.insert(*m_transferBatch->networkInfo->recEntityInfo->list.array[i]->recEntityCode);
+			}
+		}
+	}
+
+	return TAP_VALID;
 }
 
 
@@ -619,119 +851,6 @@ int TAPValidator::CreateAuditControlInfoRAPFile(string logMessage, int errorCode
 }
 
 
-TAPValidationResult TAPValidator::ValidateBatchControlInfo()
-{
-	if (!m_transferBatch->batchControlInfo->sender || !m_transferBatch->batchControlInfo->recipient || 
-			!m_transferBatch->batchControlInfo->fileSequenceNumber) {
-		log(LOG_ERROR, "Validation: Sender, Recipient or FileSequenceNumber is missing in Batch Control Info. Unable to create RAP file.");
-		return VALIDATION_IMPOSSIBLE;
-	}
-
-	if (!m_transferBatch->batchControlInfo->fileAvailableTimeStamp) {
-		int createRapRes = CreateBatchControlInfoRAPFile("fileAvailableTimeStamp is missing in Batch Control Info", 
-			BATCH_CTRL_FILE_AVAIL_TIMESTAMP_MISSING);
-		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
-	}
-	if (!m_transferBatch->batchControlInfo->specificationVersionNumber) {
-		int createRapRes = CreateBatchControlInfoRAPFile("specificationVersionNumber is missing in Batch Control Info", 
-			BATCH_CTRL_SPEC_VERSION_MISSING);
-		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
-	}
-	if (!m_transferBatch->batchControlInfo->transferCutOffTimeStamp) {
-		int createRapRes = CreateBatchControlInfoRAPFile("transferCutOffTimeStamp is missing in Batch Control Info", 
-			BATCH_CTRL_TRANSFER_CUTOFF_MISSING);
-		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
-	}
-	return TAP_VALID;
-}
-
-TAPValidationResult TAPValidator::ValidateAccountingInfo()
-{
-	if (!m_transferBatch->accountingInfo->localCurrency) {
-		int createRapRes = CreateAccountingInfoRAPFile("localCurrency is missing in Accounting Info", 
-			ACCOUNTING_LOCAL_CURRENCY_MISSING, NULL);
-		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
-	}
-	if (!m_transferBatch->accountingInfo->tapDecimalPlaces) {
-		int createRapRes = CreateAccountingInfoRAPFile("tapDecimalPlaces is missing in Accounting Info", 
-			ACCOUNTING_TAP_DECIMAL_PLACES_MISSING, NULL);
-		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
-	}
-	if (!m_transferBatch->accountingInfo->taxation && BatchContainsTaxes()) {
-		int createRapRes = CreateAccountingInfoRAPFile(
-			"taxation group is missing in Accounting Info and batch contains taxes", 
-			ACCOUNTING_TAXATION_MISSING, NULL);
-		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
-	}
-	if (!m_transferBatch->accountingInfo->discounting && BatchContainsDiscounts()) {
-		int createRapRes = CreateAccountingInfoRAPFile(
-			"discounting group is missing in Accounting Info and batch contains discounts", 
-			ACCOUNTING_DISCOUNTING_MISSING, NULL);
-		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
-	}
-	if (!m_transferBatch->accountingInfo->currencyConversionInfo && BatchContainsPositiveCharges()) {
-		int createRapRes = CreateAccountingInfoRAPFile(
-			"currencyConversion group is missing in Accounting Info and batch contains charges greater than 0",
-			ACCOUNTING_CURRENCY_CONVERSION_MISSING, NULL);
-		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
-	}
-	// Validating currency conversion table
-	if (m_transferBatch->accountingInfo->currencyConversionInfo) {
-		set<ExchangeRateCode_t> exchangeRateCodes;
-		for (int i = 0; i < m_transferBatch->accountingInfo->currencyConversionInfo->list.count; i++) {
-			if (!m_transferBatch->accountingInfo->currencyConversionInfo->list.array[i]->exchangeRateCode) {
-				int createRapRes = CreateAccountingInfoRAPFile(
-					"Mandatory item Exchange Rate Code missing within group Currency Conversion",
-					CURRENCY_CONVERSION_EXRATE_CODE_MISSING, &asn_DEF_CurrencyConversionList);
-				return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
-			}
-			if (!m_transferBatch->accountingInfo->currencyConversionInfo->list.array[i]->numberOfDecimalPlaces) {
-				int createRapRes = CreateAccountingInfoRAPFile(
-					"Mandatory item Exchange Rate Code missing within group Currency Conversion",
-					CURRENCY_CONVERSION_NUM_OF_DEC_PLACES_MISSING, &asn_DEF_CurrencyConversionList);
-				return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
-			}
-			if (!m_transferBatch->accountingInfo->currencyConversionInfo->list.array[i]->exchangeRate) {
-				int createRapRes = CreateAccountingInfoRAPFile(
-					"Mandatory item Exchange Rate Code missing within group Currency Conversion",
-					CURRENCY_CONVERSION_EXCHANGE_RATE_MISSING, &asn_DEF_CurrencyConversionList);
-				return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
-			}
-			// check exchange rate code duplication
-			if (exchangeRateCodes.find(*m_transferBatch->accountingInfo->currencyConversionInfo->list.array[i]->exchangeRateCode) !=
-					exchangeRateCodes.end()) {
-				int createRapRes = CreateAccountingInfoRAPFile(
-					"More than one occurrence of group with same Exchange Rate Code within group Currency Conversion",
-					CURRENCY_CONVERSION_EXRATE_CODE_DUPLICATION, &asn_DEF_CurrencyConversionList);
-				return ( createRapRes >= 0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE );
-			}
-			else {
-				exchangeRateCodes.insert(*m_transferBatch->accountingInfo->currencyConversionInfo->list.array[i]->exchangeRateCode);
-			}
-		}
-	}
-
-	return TAP_VALID;
-}
-
-
-TAPValidationResult TAPValidator::ValidateNetworkInfo()
-{
-	// check mandatory structures in Transfer Batch/Network Information
-	if (!m_transferBatch->networkInfo->utcTimeOffsetInfo) {
-		int createRapRes = CreateNetworkInfoRAPFile("utcTimeOffsetInfo is missing in Network Info",
-			NETWORK_UTC_TIMEOFFSET_MISSING);
-		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
-	}
-	if (!m_transferBatch->networkInfo->recEntityInfo) {
-		int createRapRes = CreateNetworkInfoRAPFile("recEntityInfo is missing in Network Info",
-			NETWORK_REC_ENTITY_MISSING);
-		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
-	}
-	return TAP_VALID;
-}
-
-
 TAPValidationResult TAPValidator::ValidateAuditControlInfo()
 {
 	// check mandatory structures in Transfer Batch/Audit Control Information
@@ -765,8 +884,44 @@ TAPValidationResult TAPValidator::ValidateAuditControlInfo()
 }
 
 
+int TAPValidator::CreateTransferBatchRAPFile(string logMessage, int errorCode)
+{
+	log(LOG_ERROR, "Validating Transfer Batch: " + logMessage + ". Creating RAP file");
+	ReturnDetail* returnDetail = (ReturnDetail*) calloc(1, sizeof(ReturnDetail));
+	returnDetail->present = ReturnDetail_PR_fatalReturn;
+	OCTET_STRING_fromBuf(&returnDetail->choice.fatalReturn.fileSequenceNumber, (const char*)m_transferBatch->batchControlInfo->fileSequenceNumber->buf, 
+		m_transferBatch->batchControlInfo->fileSequenceNumber->size);
+	returnDetail->choice.fatalReturn.transferBatchError = (TransferBatchError*) calloc(1, sizeof(TransferBatchError));
+	ErrorDetail* errorDetail = (ErrorDetail*) calloc(1, sizeof(ErrorDetail));
+	errorDetail->errorCode = errorCode;
+
+	// Fill Error Context List
+	errorDetail->errorContext = (ErrorContextList*) calloc(1, sizeof(ErrorContextList));
+	ErrorContext* errorContext1level = (ErrorContext*) calloc(1, sizeof(ErrorContext));
+	errorContext1level->pathItemId = asn_DEF_TransferBatch.tags[0] >> 2; // 2 rightmost bits is TAG class at ASN1 compiler, remove it
+	errorContext1level->itemLevel = 1;
+	ASN_SEQUENCE_ADD(errorDetail->errorContext, errorContext1level);
+	ASN_SEQUENCE_ADD(&returnDetail->choice.fatalReturn.transferBatchError->errorDetail, errorDetail);
+	
+	ReturnBatch* returnBatch = (ReturnBatch*) calloc(1, sizeof(ReturnBatch));
+	RAPFile rapFile(m_otlConnect, m_config);
+	
+	assert(m_transferBatch->batchControlInfo->sender);
+	assert(m_transferBatch->batchControlInfo->recipient);
+	assert(m_transferBatch->batchControlInfo->fileAvailableTimeStamp);
+	int loadRes = rapFile.CreateRAPFile(returnBatch, returnDetail, (char*)m_transferBatch->batchControlInfo->sender->buf,
+		(char*) m_transferBatch->batchControlInfo->recipient->buf, (char*) m_transferBatch->batchControlInfo->fileAvailableTimeStamp->localTimeStamp->buf,
+		(m_transferBatch->batchControlInfo->fileTypeIndicator ? (char*) m_transferBatch->batchControlInfo->fileTypeIndicator->buf : ""),
+		m_rapFileID, m_rapSequenceNum);
+	ASN_STRUCT_FREE(asn_DEF_ReturnBatch, returnBatch);
+	return loadRes;
+}
+
+
 TAPValidationResult TAPValidator::ValidateTransferBatch()
 {
+	assert(!m_notification);
+	assert(m_transferBatch);
 	// check mandatory structures in Transfer Batch
 	if (!m_transferBatch->batchControlInfo) {
 		int createRapRes = CreateTransferBatchRAPFile("Batch Control Info missing in Transfer Batch", 
@@ -811,13 +966,73 @@ TAPValidationResult TAPValidator::ValidateTransferBatch()
 }
 
 
+int TAPValidator::CreateNotificationRAPFile(string logMessage, int errorCode, asn_TYPE_descriptor_t* level2item)
+{
+	log(LOG_ERROR, "Validating Notification: " + logMessage + ". Creating RAP file");
+	ReturnDetail* returnDetail = (ReturnDetail*) calloc(1, sizeof(ReturnDetail));
+	returnDetail->present = ReturnDetail_PR_fatalReturn;
+	OCTET_STRING_fromBuf(&returnDetail->choice.fatalReturn.fileSequenceNumber, (const char*) m_notification->fileSequenceNumber->buf, 
+		m_notification->fileSequenceNumber->size);
+	returnDetail->choice.fatalReturn.notificationError = (NotificationError*) calloc(1, sizeof(NotificationError));
+	ErrorDetail* errorDetail = (ErrorDetail*) calloc(1, sizeof(ErrorDetail));
+	errorDetail->errorCode = errorCode;
+
+	// Fill Error Context List
+	errorDetail->errorContext = (ErrorContextList*) calloc(1, sizeof(ErrorContextList));
+	ErrorContext* errorContext1level = (ErrorContext*) calloc(1, sizeof(ErrorContext));
+	errorContext1level->pathItemId = asn_DEF_Notification.tags[0] >> 2; // 2 rightmost bits is TAG class at ASN1 compiler, remove it
+	errorContext1level->itemLevel = 1;
+	ASN_SEQUENCE_ADD(errorDetail->errorContext, errorContext1level);
+
+	if (level2item) {
+		ErrorContext* errorContext2level = (ErrorContext*) calloc(1, sizeof(ErrorContext));
+		errorContext2level->pathItemId = level2item->tags[0] >> 2; // 2 rightmost bits is TAG class at ASN1 compiler, remove it  
+		errorContext2level->itemLevel = 2;
+		ASN_SEQUENCE_ADD(errorDetail->errorContext, errorContext2level);
+	}
+	ASN_SEQUENCE_ADD(&returnDetail->choice.fatalReturn.notificationError->errorDetail, errorDetail);
+	
+	ReturnBatch* returnBatch = (ReturnBatch*) calloc(1, sizeof(ReturnBatch));
+	RAPFile rapFile(m_otlConnect, m_config);
+	
+	assert(m_notification->sender);
+	assert(m_notification->recipient);
+	assert(m_notification->fileAvailableTimeStamp);
+	int loadRes = rapFile.CreateRAPFile(returnBatch, returnDetail, (char*)m_notification->sender->buf,
+		(char*) m_notification->recipient->buf, (char*) m_notification->fileAvailableTimeStamp->localTimeStamp->buf,
+		(m_notification->fileTypeIndicator ? (char*) m_notification->fileTypeIndicator->buf : ""),
+		m_rapFileID, m_rapSequenceNum);
+	ASN_STRUCT_FREE(asn_DEF_ReturnBatch, returnBatch);
+	return loadRes;
+}
+
+
 TAPValidationResult TAPValidator::ValidateNotification()
 {
+	assert(m_notification);
+	assert(!m_transferBatch);
 	// check mandatory structures in Transfer Batch/Batch Control Information
 	if (!m_notification->sender || !m_notification->recipient || !m_notification->fileSequenceNumber) {
 		log(LOG_ERROR, "Validation: Sender, Recipient or FileSequenceNumber is missing in Notification. Unable to create RAP file.");
 		return VALIDATION_IMPOSSIBLE;
 	}
+	
+	int fileSeqNum;
+	try {
+		fileSeqNum = stoi((char*) m_notification->fileSequenceNumber->buf, NULL);
+	}
+	catch(const std::invalid_argument& ia) {
+		// wrong file sequence number given
+		int createRapRes = CreateNotificationRAPFile("fileSequenceNumber is not a number (syntax error)", 
+			FILE_SEQ_NUM_SYNTAX_ERROR, &asn_DEF_FileSequenceNumber);
+		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
+	}
+	if (!(fileSeqNum >= START_TAP_SEQUENCE_NUM && fileSeqNum <= END_TAP_SEQUENCE_NUM)) {
+		int createRapRes = CreateNotificationRAPFile("fileSequenceNumber is out of range", 
+			FILE_SEQ_NUM_OUT_OF_RANGE, &asn_DEF_FileSequenceNumber);
+		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
+	}
+	// TODO: add duplication checks for file seq num
 
 	return TAP_VALID;
 }
