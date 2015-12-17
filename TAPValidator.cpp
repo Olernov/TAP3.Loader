@@ -122,7 +122,7 @@ int RAPFile::EncodeAndUpload(ReturnBatch* returnBatch, string filename, string r
 }
 
 
-int RAPFile::CreateRAPFile(ReturnBatch* returnBatch, ReturnDetail* returnDetail, string sender, string recipient, 
+int RAPFile::CreateRAPFile(ReturnBatch* returnBatch, ReturnDetail* returnDetail, string tapSender, string tapRecipient, 
 	string tapAvailableStamp, string fileTypeIndicator, long& rapFileID, string& rapSequenceNum)
 {
 	otl_nocommit_stream otlStream;
@@ -133,7 +133,7 @@ int RAPFile::CreateRAPFile(ReturnBatch* returnBatch, ReturnDetail* returnDetail,
 		":pRAPVersion /*long,out*/, :pRAPRelease /*long,out*/, :pTapDecimalPlaces /*long,out*/)"
 		" into :fileid /*long,out*/" , m_otlConnect);
 	otlStream
-		<< recipient
+		<< tapSender
 		<< (long) (fileTypeIndicator.size()>0 ? 1 : 0)
 		<< tapAvailableStamp;
 	
@@ -154,9 +154,14 @@ int RAPFile::CreateRAPFile(ReturnBatch* returnBatch, ReturnDetail* returnDetail,
 		>> tapDecimalPlaces
 		>> rapFileID;
 	
+	if (rapFileID < 0) {
+		log(LOG_ERROR, "TAP3.CreateRAPFileByTAPLoader returned error " + to_string((long long) rapFileID));
+		return TL_ORACLEERROR;
+	}
+
 	// sender and recipient switch their places
-	OCTET_STRING_fromBuf(&returnBatch->rapBatchControlInfoRap.sender, sender.c_str(), sender.size());
-	OCTET_STRING_fromBuf(&returnBatch->rapBatchControlInfoRap.recipient, recipient.c_str(), recipient.size());
+	OCTET_STRING_fromBuf(&returnBatch->rapBatchControlInfoRap.sender, tapSender.c_str(), tapSender.size());
+	OCTET_STRING_fromBuf(&returnBatch->rapBatchControlInfoRap.recipient, tapRecipient.c_str(), tapRecipient.size());
 
 	OCTET_STRING_fromBuf(&returnBatch->rapBatchControlInfoRap.rapFileSequenceNumber, rapSequenceNum.c_str(), rapSequenceNum.size());
 	returnBatch->rapBatchControlInfoRap.rapFileCreationTimeStamp.localTimeStamp =
@@ -194,6 +199,7 @@ int RAPFile::CreateRAPFile(ReturnBatch* returnBatch, ReturnDetail* returnDetail,
 	if (loadResult >= 0)
 		loadResult = EncodeAndUpload(returnBatch, filename, roamingHubName);
 	
+	otlStream.close();
 	return loadResult;
 }
 
@@ -202,6 +208,52 @@ int RAPFile::CreateRAPFile(ReturnBatch* returnBatch, ReturnDetail* returnDetail,
 TAPValidator::TAPValidator(otl_connect& dbConnect, Config& config) 
 	: m_otlConnect(dbConnect), m_config(config), m_rapFileID(0)
 {
+}
+
+
+bool TAPValidator::IsRecipientCorrect(string recipient)
+{
+	otl_nocommit_stream otlStream;
+	string ourTAPCode;
+	otlStream.open(1, "call BILLING.TAP3.GetOurTAPCode() into :ourTapCode /*char[20],out*/" , m_otlConnect);
+	otlStream
+		>> ourTAPCode;
+	otlStream.close();
+	return (recipient == ourTAPCode);
+}
+
+
+bool TAPValidator::FileIsDuplicated()
+{
+	otl_nocommit_stream otlStream;
+	otlStream.open(1, "call BILLING.TAP3.IsTAPFileDuplicated("
+		":sender /*char[20],in*/, :recipient /*char[20],in*/, :file_seqnum /*char[20],in*/, "
+		":file_type_indic /*char[20],in*/, :rap_file_seqnum /*char[20],in*/) "
+		"into :res /*long,out*/", m_otlConnect);
+	if (m_transferBatch) {
+		otlStream
+			<< m_transferBatch->batchControlInfo->sender->buf
+			<< m_transferBatch->batchControlInfo->recipient->buf
+			<< m_transferBatch->batchControlInfo->fileSequenceNumber->buf
+			<< ( m_transferBatch->batchControlInfo->fileTypeIndicator ? (char*) m_transferBatch->batchControlInfo->fileTypeIndicator->buf : "" )
+			<< ( m_transferBatch->batchControlInfo->rapFileSequenceNumber ? (char*) m_transferBatch->batchControlInfo->rapFileSequenceNumber->buf : "" );
+	}
+	else {
+		otlStream
+			<< m_notification->sender->buf
+			<< m_notification->recipient->buf
+			<< m_notification->fileSequenceNumber->buf
+			<< ( m_notification->fileTypeIndicator ? (char*) m_notification->fileTypeIndicator->buf : "" )
+			<< ( m_notification->rapFileSequenceNumber ? (char*) m_notification->rapFileSequenceNumber->buf : "" );
+	}
+
+	long result;
+	otlStream >> result;
+	otlStream.close();
+	if (result > 0)
+		return true;
+	else
+		return false;
 }
 
 
@@ -302,6 +354,41 @@ bool TAPValidator::BatchContainsPositiveCharges()
 }
 
 
+long long TAPValidator::ChargeInfoListTotalCharge(ChargeInformationList* chargeInfoList)
+{
+	long long totalCharge = 0;
+	for (int chr_index = 0; chr_index < chargeInfoList->list.count; chr_index++)
+		for (int chr_det_index = 0; chr_det_index < chargeInfoList->list.array[chr_index]->chargeDetailList->list.count; chr_det_index++) {
+			if (string((char*) chargeInfoList->list.array[chr_index]->chargeDetailList->list.array[chr_det_index]->chargeType->buf) == "00")
+				totalCharge += OctetStr2Int64(*chargeInfoList->list.array[chr_index]->chargeDetailList->list.array[chr_det_index]->charge);
+	}
+	return totalCharge;
+}
+
+
+long long TAPValidator::BatchTotalCharge()
+{
+	long long totalCharge = 0;
+	for (int call_index = 0; call_index < m_transferBatch->callEventDetails->list.count; call_index++) {
+		if(m_transferBatch->callEventDetails->list.array[call_index]->present == CallEventDetail_PR_mobileOriginatedCall) {
+			MobileOriginatedCall* mCall = &m_transferBatch->callEventDetails->list.array[call_index]->choice.mobileOriginatedCall;
+			for (int bs_used_index = 0; bs_used_index < mCall->basicServiceUsedList->list.count; bs_used_index++)
+				totalCharge += ChargeInfoListTotalCharge(mCall->basicServiceUsedList->list.array[bs_used_index]->chargeInformationList);
+		}
+		if(m_transferBatch->callEventDetails->list.array[call_index]->present == CallEventDetail_PR_mobileTerminatedCall) {
+			MobileTerminatedCall* mCall = &m_transferBatch->callEventDetails->list.array[call_index]->choice.mobileTerminatedCall;
+			for (int bs_used_index = 0; bs_used_index < mCall->basicServiceUsedList->list.count; bs_used_index++)
+				totalCharge += ChargeInfoListTotalCharge(mCall->basicServiceUsedList->list.array[bs_used_index]->chargeInformationList);
+		}
+		if(m_transferBatch->callEventDetails->list.array[call_index]->present == CallEventDetail_PR_gprsCall) {
+			GprsCall* mCall = &m_transferBatch->callEventDetails->list.array[call_index]->choice.gprsCall;
+			totalCharge += ChargeInfoListTotalCharge(mCall->gprsServiceUsed->chargeInformationList);
+		}
+	}
+	return totalCharge;
+}
+
+
 int TAPValidator::CreateBatchControlInfoRAPFile(string logMessage, int errorCode, const vector<ErrContextAsnItem>& asnItems)
 {
 	log(LOG_ERROR, "Validating Batch Control Info: " + logMessage + ". Creating RAP file ");
@@ -398,9 +485,16 @@ TAPValidationResult TAPValidator::ValidateBatchControlInfo()
 {
 	if (!m_transferBatch->batchControlInfo->sender || !m_transferBatch->batchControlInfo->recipient || 
 			!m_transferBatch->batchControlInfo->fileSequenceNumber) {
-		log(LOG_ERROR, "Validation: Sender, Recipient or FileSequenceNumber is missing in Batch Control Info. Unable to create RAP file.");
+		log(LOG_ERROR, "Validation: Sender, Recipient or FileSequenceNumber is missing in Batch Control Info.");
 		return VALIDATION_IMPOSSIBLE;
 	}
+
+	if(!IsRecipientCorrect((char*) m_transferBatch->batchControlInfo->recipient->buf)) {
+		log(LOG_ERROR, "Validation: Recipient " + string((char*) m_transferBatch->batchControlInfo->recipient->buf) + 
+			" is incorrect. File is not addressed for us.");
+		return VALIDATION_IMPOSSIBLE;
+	}
+
 	if (!m_transferBatch->batchControlInfo->fileAvailableTimeStamp) {
 		int createRapRes = CreateBatchControlInfoRAPFile("fileAvailableTimeStamp is missing in Batch Control Info", 
 			BATCH_CTRL_FILE_AVAIL_TIMESTAMP_MISSING, NO_ASN_ITEMS);
@@ -435,6 +529,15 @@ TAPValidationResult TAPValidator::ValidateBatchControlInfo()
 		asnItems.push_back(ErrContextAsnItem(&asn_DEF_FileSequenceNumber, 0));
 		int createRapRes = CreateBatchControlInfoRAPFile("fileSequenceNumber is out of range", 
 			FILE_SEQ_NUM_OUT_OF_RANGE, asnItems);
+		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
+	}
+
+	if (FileIsDuplicated()) {
+		vector<ErrContextAsnItem> asnItems;
+		asnItems.push_back(ErrContextAsnItem(&asn_DEF_FileSequenceNumber, 0));
+		int createRapRes = CreateBatchControlInfoRAPFile(
+			"Duplication: File sequence number of the received file has already been received and successfully processed", 
+			FILE_SEQ_NUM_DUPLICATION, asnItems);
 		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
 	}
 
@@ -892,8 +995,19 @@ TAPValidationResult TAPValidator::ValidateAuditControlInfo()
 		vector<ErrContextAsnItem> asnItems;
 		asnItems.push_back(ErrContextAsnItem(&asn_DEF_CallEventDetailsCount, 0));
 		int createRapRes = CreateAuditControlInfoRAPFile(
-			"Audit Control Info/CallEventDetailsCount does not match the count of Call Event Details",
+			"CallEventDetailsCount does not match the count of Call Event Details",
 			CALL_COUNT_MISMATCH, asnItems);
+		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
+	}
+
+	long long auditTotalCharge = OctetStr2Int64(*m_transferBatch->auditControlInfo->totalCharge);
+	long long calcTotalCharge = BatchTotalCharge();
+	if (OctetStr2Int64(*m_transferBatch->auditControlInfo->totalCharge) != BatchTotalCharge()) {
+		vector<ErrContextAsnItem> asnItems;
+		asnItems.push_back(ErrContextAsnItem(&asn_DEF_TotalCharge, 0));
+		int createRapRes = CreateAuditControlInfoRAPFile(
+			"Total charge does not match the calculated sum of non refund charges",
+			TOTAL_CHARGE_MISMATCH, asnItems);
 		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
 	}
 	return TAP_VALID;
@@ -938,6 +1052,7 @@ TAPValidationResult TAPValidator::ValidateTransferBatch()
 {
 	assert(!m_notification);
 	assert(m_transferBatch);
+	
 	// check mandatory structures in Transfer Batch
 	if (!m_transferBatch->batchControlInfo) {
 		int createRapRes = CreateTransferBatchRAPFile("Batch Control Info missing in Transfer Batch", 
@@ -1032,9 +1147,13 @@ TAPValidationResult TAPValidator::ValidateNotification()
 {
 	assert(m_notification);
 	assert(!m_transferBatch);
-	// check mandatory structures in Transfer Batch/Batch Control Information
 	if (!m_notification->sender || !m_notification->recipient || !m_notification->fileSequenceNumber) {
-		log(LOG_ERROR, "Validation: Sender, Recipient or FileSequenceNumber is missing in Notification. Unable to create RAP file.");
+		log(LOG_ERROR, "Validation: Sender, Recipient or FileSequenceNumber is missing in Notification. ");
+		return VALIDATION_IMPOSSIBLE;
+	}
+
+	if(!IsRecipientCorrect((char*) m_notification->recipient->buf)) {
+		log(LOG_ERROR, "Validation: Recipient " + string((char*) m_notification->recipient->buf) + " is incorrect. ");
 		return VALIDATION_IMPOSSIBLE;
 	}
 	
@@ -1065,8 +1184,6 @@ TAPValidationResult TAPValidator::ValidateNotification()
 
 TAPValidationResult TAPValidator::Validate(DataInterChange* dataInterchange)
 {
-	// TODO: add check
-	// if file is not addressed for our network, then return WRONG_ADDRESSEE;
 	switch (dataInterchange->present) {
 		case DataInterChange_PR_transferBatch:
 			m_transferBatch = &dataInterchange->choice.transferBatch;

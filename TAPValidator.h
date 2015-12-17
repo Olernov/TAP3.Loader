@@ -33,6 +33,7 @@ enum TAPValidationErrors
 
 	FILE_SEQ_NUM_SYNTAX_ERROR = 10,
 	FILE_SEQ_NUM_OUT_OF_RANGE = 20,
+	FILE_SEQ_NUM_DUPLICATION = 201,
 
 	ACCOUNTING_TAXATION_MISSING = 30,
 	ACCOUNTING_DISCOUNTING_MISSING = 31,
@@ -64,7 +65,8 @@ enum TAPValidationErrors
 	AUDIT_CTRL_TOTAL_DISCOUNT_MISSING = 32,
 	AUDIT_CTRL_CALL_COUNT_MISSING = 33,
 	
-	CALL_COUNT_MISMATCH = 100
+	CALL_COUNT_MISMATCH = 100,
+	TOTAL_CHARGE_MISMATCH = 100
 };
 
 class ErrContextAsnItem
@@ -108,11 +110,15 @@ private:
 	long m_rapFileID;
 	string m_rapSequenceNum;
 
+	bool IsRecipientCorrect(string recipient);
+	bool FileIsDuplicated();
 	bool BatchContainsTaxes();
 	bool BatchContainsDiscounts();
 	bool ChargeInfoContainsPositiveCharges(ChargeInformation* chargeInfo);
 	bool BatchContainsPositiveCharges();
-
+	long long ChargeInfoListTotalCharge(ChargeInformationList* chargeInfoList);
+	long long BatchTotalCharge();
+	
 	int CreateTransferBatchRAPFile(string logMessage, int errorCode);
 	int CreateNotificationRAPFile(string logMessage, int errorCode, const vector<ErrContextAsnItem>& asnItems);
 	int CreateBatchControlInfoRAPFile(string logMessage, int errorCode, const vector<ErrContextAsnItem>& asnItems);
