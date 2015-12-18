@@ -1,0 +1,977 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="12.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug RAP|Win32">
+      <Configuration>Debug RAP</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="DLL Release|Win32">
+      <Configuration>DLL Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{47A64EE7-7366-4B51-AC36-13F3A993EF14}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <RootNamespace>TAP312c</RootNamespace>
+    <ProjectName>TAP3.Loader</ProjectName>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v100</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug RAP|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v100</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v120_xp</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='DLL Release|Win32'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v100</PlatformToolset>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug RAP|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='DLL Release|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <LinkIncremental>true</LinkIncremental>
+    <IncludePath>$(VCInstallDir)include;$(VCInstallDir)atlmfc\include;$(WindowsSdkDir)include;$(FrameworkSDKDir)\include;</IncludePath>
+    <LibraryPath>$(VCInstallDir)lib;$(VCInstallDir)atlmfc\lib;$(WindowsSdkDir)lib\x86;$(FrameworkSDKDir)\lib;$(WindowsSdkDir)lib\winv6.3\um\x86</LibraryPath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug RAP|Win32'">
+    <LinkIncremental>true</LinkIncremental>
+    <IncludePath>C:\Oracle\product\11.2.0\client_1\oci\include;$(VCInstallDir)include;$(VCInstallDir)atlmfc\include;$(WindowsSdkDir)include;$(FrameworkSDKDir)\include;c:\Projects\TAP3\TAP3.12_Loader\;c:\Projects\TAP3\TAP3\ASN_Structures\;c:\Projects\TAP3\TAP3\RAP_ASN_Structures\;c:\Projects\TAP3\</IncludePath>
+    <LibraryPath>C:\Oracle\product\11.2.0\client_1\oci\lib\msvc;$(VCInstallDir)lib;$(VCInstallDir)atlmfc\lib;$(WindowsSdkDir)lib\x86;$(FrameworkSDKDir)\lib;$(WindowsSdkDir)lib\winv6.3\um\x86</LibraryPath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='DLL Release|Win32'">
+    <LinkIncremental>false</LinkIncremental>
+    <TargetExt>.dll</TargetExt>
+    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);C:\Oracle\product\11.2.0\client_1\oci\include;$(VCInstallDir)include;$(VCInstallDir)atlmfc\include;$(WindowsSdkDir)include;$(FrameworkSDKDir)\include;c:\Projects\TAP3\TAP3.12_Loader\;c:\Projects\TAP3\TAP3\ASN_Structures\;c:\Projects\TAP3\TAP3\RAP_ASN_Structures\;c:\Projects\TAP3\</IncludePath>
+    <LibraryPath>$(VC_LibraryPath_x86);$(WindowsSDK_LibraryPath_x86);C:\Oracle\product\11.2.0\client_1\oci\lib\msvc;$(VCInstallDir)lib;$(VCInstallDir)atlmfc\lib;$(WindowsSdkDir)lib\x86;$(FrameworkSDKDir)\lib;$(WindowsSdkDir)lib\winv6.3\um\x86</LibraryPath>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>Level2</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(WindowsSdkDir)include\um;$(WindowsSdkDir)include\shared;c:\Projects\LibNCFtp\Strn;c:\Projects\LibNCFtp\sio;c:\Projects\LibNCFtp\libncftp;C:\Oracle\product\11.2.0\client_1\oci\include;c:\Projects\TAP3\TAP3.12_Loader\;c:\Projects\TAP3\TAP3\ASN_Structures\;c:\Projects\TAP3\TAP3\RAP_ASN_Structures\;c:\Projects\TAP3\</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies);ws2_32.lib;oci.lib;strn.lib;libncftp.lib;sio.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>c:\Projects\LibNCFtp\libncftp\Release\;C:\Oracle\product\11.2.0\client_1\oci\lib\msvc;</AdditionalLibraryDirectories>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug RAP|Win32'">
+    <ClCompile>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>Level2</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(WindowsSdkDir)include\um;$(WindowsSdkDir)include\shared</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies);oci.lib</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='DLL Release|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>false</GenerateDebugInformation>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies);oci.lib</AdditionalDependencies>
+      <ModuleDefinitionFile>TAP3_Loader.def</ModuleDefinitionFile>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <None Include="..\ASN_Structures\.TAP3.12.asn1.swp" />
+    <None Include="..\ASN_Structures\Makefile.am.sample" />
+    <None Include="..\ASN_Structures\TAP3.12.asn1" />
+    <None Include="ReadMe.txt" />
+    <None Include="TAP3_Loader.def" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\ConfigContainer.h" />
+    <ClInclude Include="..\..\TAP_Constants.h" />
+    <ClInclude Include="..\ASN_Structures\AbsoluteAmount.h" />
+    <ClInclude Include="..\ASN_Structures\AccessPointNameNI.h" />
+    <ClInclude Include="..\ASN_Structures\AccessPointNameOI.h" />
+    <ClInclude Include="..\ASN_Structures\AccountingInfo.h" />
+    <ClInclude Include="..\ASN_Structures\ActualDeliveryTimeStamp.h" />
+    <ClInclude Include="..\ASN_Structures\AddressStringDigits.h" />
+    <ClInclude Include="..\ASN_Structures\AdvisedCharge.h" />
+    <ClInclude Include="..\ASN_Structures\AdvisedChargeCurrency.h" />
+    <ClInclude Include="..\ASN_Structures\AdvisedChargeInformation.h" />
+    <ClInclude Include="..\ASN_Structures\AgeOfLocation.h" />
+    <ClInclude Include="..\ASN_Structures\AsciiString.h" />
+    <ClInclude Include="..\ASN_Structures\asn_application.h" />
+    <ClInclude Include="..\ASN_Structures\asn_codecs.h" />
+    <ClInclude Include="..\ASN_Structures\asn_codecs_prim.h" />
+    <ClInclude Include="..\ASN_Structures\asn_internal.h" />
+    <ClInclude Include="..\ASN_Structures\asn_SEQUENCE_OF.h" />
+    <ClInclude Include="..\ASN_Structures\asn_SET_OF.h" />
+    <ClInclude Include="..\ASN_Structures\asn_system.h" />
+    <ClInclude Include="..\ASN_Structures\AuditControlInfo.h" />
+    <ClInclude Include="..\ASN_Structures\BasicService.h" />
+    <ClInclude Include="..\ASN_Structures\BasicServiceCode.h" />
+    <ClInclude Include="..\ASN_Structures\BasicServiceCodeList.h" />
+    <ClInclude Include="..\ASN_Structures\BasicServiceUsed.h" />
+    <ClInclude Include="..\ASN_Structures\BasicServiceUsedList.h" />
+    <ClInclude Include="..\ASN_Structures\BatchControlInfo.h" />
+    <ClInclude Include="..\ASN_Structures\BCDString.h" />
+    <ClInclude Include="..\ASN_Structures\BearerServiceCode.h" />
+    <ClInclude Include="..\ASN_Structures\ber_decoder.h" />
+    <ClInclude Include="..\ASN_Structures\ber_tlv_length.h" />
+    <ClInclude Include="..\ASN_Structures\ber_tlv_tag.h" />
+    <ClInclude Include="..\ASN_Structures\Bid.h" />
+    <ClInclude Include="..\ASN_Structures\BIT_STRING.h" />
+    <ClInclude Include="..\ASN_Structures\CalledNumber.h" />
+    <ClInclude Include="..\ASN_Structures\CalledPlace.h" />
+    <ClInclude Include="..\ASN_Structures\CalledRegion.h" />
+    <ClInclude Include="..\ASN_Structures\CallEventDetail.h" />
+    <ClInclude Include="..\ASN_Structures\CallEventDetailList.h" />
+    <ClInclude Include="..\ASN_Structures\CallEventDetailsCount.h" />
+    <ClInclude Include="..\ASN_Structures\CallEventStartTimeStamp.h" />
+    <ClInclude Include="..\ASN_Structures\CallingNumber.h" />
+    <ClInclude Include="..\ASN_Structures\CallOriginator.h" />
+    <ClInclude Include="..\ASN_Structures\CallReference.h" />
+    <ClInclude Include="..\ASN_Structures\CallTypeGroup.h" />
+    <ClInclude Include="..\ASN_Structures\CallTypeLevel1.h" />
+    <ClInclude Include="..\ASN_Structures\CallTypeLevel2.h" />
+    <ClInclude Include="..\ASN_Structures\CallTypeLevel3.h" />
+    <ClInclude Include="..\ASN_Structures\CamelDestinationNumber.h" />
+    <ClInclude Include="..\ASN_Structures\CamelInvocationFee.h" />
+    <ClInclude Include="..\ASN_Structures\CamelServiceKey.h" />
+    <ClInclude Include="..\ASN_Structures\CamelServiceLevel.h" />
+    <ClInclude Include="..\ASN_Structures\CamelServiceUsed.h" />
+    <ClInclude Include="..\ASN_Structures\CauseForTerm.h" />
+    <ClInclude Include="..\ASN_Structures\CellId.h" />
+    <ClInclude Include="..\ASN_Structures\Charge.h" />
+    <ClInclude Include="..\ASN_Structures\ChargeableSubscriber.h" />
+    <ClInclude Include="..\ASN_Structures\ChargeableUnits.h" />
+    <ClInclude Include="..\ASN_Structures\ChargeDetail.h" />
+    <ClInclude Include="..\ASN_Structures\ChargeDetailList.h" />
+    <ClInclude Include="..\ASN_Structures\ChargeDetailTimeStamp.h" />
+    <ClInclude Include="..\ASN_Structures\ChargedItem.h" />
+    <ClInclude Include="..\ASN_Structures\ChargedParty.h" />
+    <ClInclude Include="..\ASN_Structures\ChargedPartyEquipment.h" />
+    <ClInclude Include="..\ASN_Structures\ChargedPartyHomeIdentification.h" />
+    <ClInclude Include="..\ASN_Structures\ChargedPartyHomeIdList.h" />
+    <ClInclude Include="..\ASN_Structures\ChargedPartyIdentification.h" />
+    <ClInclude Include="..\ASN_Structures\ChargedPartyIdentifier.h" />
+    <ClInclude Include="..\ASN_Structures\ChargedPartyIdList.h" />
+    <ClInclude Include="..\ASN_Structures\ChargedPartyIdType.h" />
+    <ClInclude Include="..\ASN_Structures\ChargedPartyInformation.h" />
+    <ClInclude Include="..\ASN_Structures\ChargedPartyLocation.h" />
+    <ClInclude Include="..\ASN_Structures\ChargedPartyLocationList.h" />
+    <ClInclude Include="..\ASN_Structures\ChargedPartyStatus.h" />
+    <ClInclude Include="..\ASN_Structures\ChargedUnits.h" />
+    <ClInclude Include="..\ASN_Structures\ChargeInformation.h" />
+    <ClInclude Include="..\ASN_Structures\ChargeInformationList.h" />
+    <ClInclude Include="..\ASN_Structures\ChargeRefundIndicator.h" />
+    <ClInclude Include="..\ASN_Structures\ChargeType.h" />
+    <ClInclude Include="..\ASN_Structures\ChargingId.h" />
+    <ClInclude Include="..\ASN_Structures\ChargingPoint.h" />
+    <ClInclude Include="..\ASN_Structures\ChargingTimeStamp.h" />
+    <ClInclude Include="..\ASN_Structures\ClirIndicator.h" />
+    <ClInclude Include="..\ASN_Structures\Code.h" />
+    <ClInclude Include="..\ASN_Structures\Commission.h" />
+    <ClInclude Include="..\ASN_Structures\CompletionTimeStamp.h" />
+    <ClInclude Include="..\ASN_Structures\constraints.h" />
+    <ClInclude Include="..\ASN_Structures\constr_CHOICE.h" />
+    <ClInclude Include="..\ASN_Structures\constr_SEQUENCE.h" />
+    <ClInclude Include="..\ASN_Structures\constr_SEQUENCE_OF.h" />
+    <ClInclude Include="..\ASN_Structures\constr_SET_OF.h" />
+    <ClInclude Include="..\ASN_Structures\constr_TYPE.h" />
+    <ClInclude Include="..\ASN_Structures\ContentChargingPoint.h" />
+    <ClInclude Include="..\ASN_Structures\ContentProvider.h" />
+    <ClInclude Include="..\ASN_Structures\ContentProviderIdentifier.h" />
+    <ClInclude Include="..\ASN_Structures\ContentProviderIdList.h" />
+    <ClInclude Include="..\ASN_Structures\ContentProviderIdType.h" />
+    <ClInclude Include="..\ASN_Structures\ContentProviderName.h" />
+    <ClInclude Include="..\ASN_Structures\ContentServiceUsed.h" />
+    <ClInclude Include="..\ASN_Structures\ContentServiceUsedList.h" />
+    <ClInclude Include="..\ASN_Structures\ContentTransaction.h" />
+    <ClInclude Include="..\ASN_Structures\ContentTransactionBasicInfo.h" />
+    <ClInclude Include="..\ASN_Structures\ContentTransactionCode.h" />
+    <ClInclude Include="..\ASN_Structures\ContentTransactionType.h" />
+    <ClInclude Include="..\ASN_Structures\CseInformation.h" />
+    <ClInclude Include="..\ASN_Structures\Currency.h" />
+    <ClInclude Include="..\ASN_Structures\CurrencyConversion.h" />
+    <ClInclude Include="..\ASN_Structures\CurrencyConversionList.h" />
+    <ClInclude Include="..\ASN_Structures\CustomerIdentifier.h" />
+    <ClInclude Include="..\ASN_Structures\CustomerIdType.h" />
+    <ClInclude Include="..\ASN_Structures\DataInterChange.h" />
+    <ClInclude Include="..\ASN_Structures\DataVolume.h" />
+    <ClInclude Include="..\ASN_Structures\DataVolumeIncoming.h" />
+    <ClInclude Include="..\ASN_Structures\DataVolumeOutgoing.h" />
+    <ClInclude Include="..\ASN_Structures\DateTime.h" />
+    <ClInclude Include="..\ASN_Structures\DateTimeLong.h" />
+    <ClInclude Include="..\ASN_Structures\DefaultCallHandlingIndicator.h" />
+    <ClInclude Include="..\ASN_Structures\DepositTimeStamp.h" />
+    <ClInclude Include="..\ASN_Structures\der_encoder.h" />
+    <ClInclude Include="..\ASN_Structures\Destination.h" />
+    <ClInclude Include="..\ASN_Structures\DestinationNetwork.h" />
+    <ClInclude Include="..\ASN_Structures\DialledDigits.h" />
+    <ClInclude Include="..\ASN_Structures\Discount.h" />
+    <ClInclude Include="..\ASN_Structures\DiscountableAmount.h" />
+    <ClInclude Include="..\ASN_Structures\DiscountApplied.h" />
+    <ClInclude Include="..\ASN_Structures\DiscountCode.h" />
+    <ClInclude Include="..\ASN_Structures\DiscountInformation.h" />
+    <ClInclude Include="..\ASN_Structures\Discounting.h" />
+    <ClInclude Include="..\ASN_Structures\DiscountingList.h" />
+    <ClInclude Include="..\ASN_Structures\DiscountRate.h" />
+    <ClInclude Include="..\ASN_Structures\DiscountValue.h" />
+    <ClInclude Include="..\ASN_Structures\DistanceChargeBandCode.h" />
+    <ClInclude Include="..\ASN_Structures\EarliestCallTimeStamp.h" />
+    <ClInclude Include="..\ASN_Structures\ElementId.h" />
+    <ClInclude Include="..\ASN_Structures\ElementType.h" />
+    <ClInclude Include="..\ASN_Structures\EquipmentId.h" />
+    <ClInclude Include="..\ASN_Structures\EquipmentIdType.h" />
+    <ClInclude Include="..\ASN_Structures\Esn.h" />
+    <ClInclude Include="..\ASN_Structures\EventReference.h" />
+    <ClInclude Include="..\ASN_Structures\ExchangeRate.h" />
+    <ClInclude Include="..\ASN_Structures\ExchangeRateCode.h" />
+    <ClInclude Include="..\ASN_Structures\FileAvailableTimeStamp.h" />
+    <ClInclude Include="..\ASN_Structures\FileCreationTimeStamp.h" />
+    <ClInclude Include="..\ASN_Structures\FileSequenceNumber.h" />
+    <ClInclude Include="..\ASN_Structures\FileTypeIndicator.h" />
+    <ClInclude Include="..\ASN_Structures\FixedDiscountValue.h" />
+    <ClInclude Include="..\ASN_Structures\Fnur.h" />
+    <ClInclude Include="..\ASN_Structures\GeographicalLocation.h" />
+    <ClInclude Include="..\ASN_Structures\GprsBasicCallInformation.h" />
+    <ClInclude Include="..\ASN_Structures\GprsCall.h" />
+    <ClInclude Include="..\ASN_Structures\GprsChargeableSubscriber.h" />
+    <ClInclude Include="..\ASN_Structures\GprsDestination.h" />
+    <ClInclude Include="..\ASN_Structures\GprsLocationInformation.h" />
+    <ClInclude Include="..\ASN_Structures\GprsNetworkLocation.h" />
+    <ClInclude Include="..\ASN_Structures\GprsServiceUsed.h" />
+    <ClInclude Include="..\ASN_Structures\GsmChargeableSubscriber.h" />
+    <ClInclude Include="..\ASN_Structures\GuaranteedBitRate.h" />
+    <ClInclude Include="..\ASN_Structures\HexString.h" />
+    <ClInclude Include="..\ASN_Structures\HomeBid.h" />
+    <ClInclude Include="..\ASN_Structures\HomeIdentifier.h" />
+    <ClInclude Include="..\ASN_Structures\HomeIdType.h" />
+    <ClInclude Include="..\ASN_Structures\HomeLocationDescription.h" />
+    <ClInclude Include="..\ASN_Structures\HomeLocationInformation.h" />
+    <ClInclude Include="..\ASN_Structures\HorizontalAccuracyDelivered.h" />
+    <ClInclude Include="..\ASN_Structures\HorizontalAccuracyRequested.h" />
+    <ClInclude Include="..\ASN_Structures\HSCSDIndicator.h" />
+    <ClInclude Include="..\ASN_Structures\Imei.h" />
+    <ClInclude Include="..\ASN_Structures\ImeiOrEsn.h" />
+    <ClInclude Include="..\ASN_Structures\Imsi.h" />
+    <ClInclude Include="..\ASN_Structures\IMSSignallingContext.h" />
+    <ClInclude Include="..\ASN_Structures\INTEGER.h" />
+    <ClInclude Include="..\ASN_Structures\InternetServiceProvider.h" />
+    <ClInclude Include="..\ASN_Structures\InternetServiceProviderIdList.h" />
+    <ClInclude Include="..\ASN_Structures\IspIdentifier.h" />
+    <ClInclude Include="..\ASN_Structures\IspIdType.h" />
+    <ClInclude Include="..\ASN_Structures\ISPList.h" />
+    <ClInclude Include="..\ASN_Structures\LatestCallTimeStamp.h" />
+    <ClInclude Include="..\ASN_Structures\LCSQosDelivered.h" />
+    <ClInclude Include="..\ASN_Structures\LCSQosRequested.h" />
+    <ClInclude Include="..\ASN_Structures\LCSRequestTimestamp.h" />
+    <ClInclude Include="..\ASN_Structures\LCSSPIdentification.h" />
+    <ClInclude Include="..\ASN_Structures\LCSSPIdentificationList.h" />
+    <ClInclude Include="..\ASN_Structures\LCSSPInformation.h" />
+    <ClInclude Include="..\ASN_Structures\LCSTransactionStatus.h" />
+    <ClInclude Include="..\ASN_Structures\LocalCurrency.h" />
+    <ClInclude Include="..\ASN_Structures\LocalTimeStamp.h" />
+    <ClInclude Include="..\ASN_Structures\LocationArea.h" />
+    <ClInclude Include="..\ASN_Structures\LocationDescription.h" />
+    <ClInclude Include="..\ASN_Structures\LocationIdentifier.h" />
+    <ClInclude Include="..\ASN_Structures\LocationIdType.h" />
+    <ClInclude Include="..\ASN_Structures\LocationInformation.h" />
+    <ClInclude Include="..\ASN_Structures\LocationService.h" />
+    <ClInclude Include="..\ASN_Structures\LocationServiceUsage.h" />
+    <ClInclude Include="..\ASN_Structures\MaximumBitRate.h" />
+    <ClInclude Include="..\ASN_Structures\Mdn.h" />
+    <ClInclude Include="..\ASN_Structures\MessageDescription.h" />
+    <ClInclude Include="..\ASN_Structures\MessageDescriptionCode.h" />
+    <ClInclude Include="..\ASN_Structures\MessageDescriptionInfoList.h" />
+    <ClInclude Include="..\ASN_Structures\MessageDescriptionInformation.h" />
+    <ClInclude Include="..\ASN_Structures\MessageStatus.h" />
+    <ClInclude Include="..\ASN_Structures\MessageType.h" />
+    <ClInclude Include="..\ASN_Structures\MessagingEvent.h" />
+    <ClInclude Include="..\ASN_Structures\MessagingEventService.h" />
+    <ClInclude Include="..\ASN_Structures\Min.h" />
+    <ClInclude Include="..\ASN_Structures\MinChargeableSubscriber.h" />
+    <ClInclude Include="..\ASN_Structures\MoBasicCallInformation.h" />
+    <ClInclude Include="..\ASN_Structures\MobileOriginatedCall.h" />
+    <ClInclude Include="..\ASN_Structures\MobileSession.h" />
+    <ClInclude Include="..\ASN_Structures\MobileSessionService.h" />
+    <ClInclude Include="..\ASN_Structures\MobileTerminatedCall.h" />
+    <ClInclude Include="..\ASN_Structures\Msisdn.h" />
+    <ClInclude Include="..\ASN_Structures\MtBasicCallInformation.h" />
+    <ClInclude Include="..\ASN_Structures\NativeEnumerated.h" />
+    <ClInclude Include="..\ASN_Structures\NativeInteger.h" />
+    <ClInclude Include="..\ASN_Structures\Network.h" />
+    <ClInclude Include="..\ASN_Structures\NetworkAccessIdentifier.h" />
+    <ClInclude Include="..\ASN_Structures\NetworkElement.h" />
+    <ClInclude Include="..\ASN_Structures\NetworkElementList.h" />
+    <ClInclude Include="..\ASN_Structures\NetworkId.h" />
+    <ClInclude Include="..\ASN_Structures\NetworkIdentifier.h" />
+    <ClInclude Include="..\ASN_Structures\NetworkIdType.h" />
+    <ClInclude Include="..\ASN_Structures\NetworkInfo.h" />
+    <ClInclude Include="..\ASN_Structures\NetworkInitPDPContext.h" />
+    <ClInclude Include="..\ASN_Structures\NetworkList.h" />
+    <ClInclude Include="..\ASN_Structures\NetworkLocation.h" />
+    <ClInclude Include="..\ASN_Structures\NonChargedNumber.h" />
+    <ClInclude Include="..\ASN_Structures\NonChargedParty.h" />
+    <ClInclude Include="..\ASN_Structures\NonChargedPartyNumber.h" />
+    <ClInclude Include="..\ASN_Structures\NonChargedPublicUserId.h" />
+    <ClInclude Include="..\ASN_Structures\Notification.h" />
+    <ClInclude Include="..\ASN_Structures\NumberOfDecimalPlaces.h" />
+    <ClInclude Include="..\ASN_Structures\NumberString.h" />
+    <ClInclude Include="..\ASN_Structures\ObjectType.h" />
+    <ClInclude Include="..\ASN_Structures\OCTET_STRING.h" />
+    <ClInclude Include="..\ASN_Structures\OperatorSpecInfoList.h" />
+    <ClInclude Include="..\ASN_Structures\OperatorSpecInformation.h" />
+    <ClInclude Include="..\ASN_Structures\OrderPlacedTimeStamp.h" />
+    <ClInclude Include="..\ASN_Structures\OriginatingNetwork.h" />
+    <ClInclude Include="..\ASN_Structures\PacketDataProtocolAddress.h" />
+    <ClInclude Include="..\ASN_Structures\PaidIndicator.h" />
+    <ClInclude Include="..\ASN_Structures\PartialTypeIndicator.h" />
+    <ClInclude Include="..\ASN_Structures\PaymentMethod.h" />
+    <ClInclude Include="..\ASN_Structures\PdpAddress.h" />
+    <ClInclude Include="..\ASN_Structures\PDPContextStartTimestamp.h" />
+    <ClInclude Include="..\ASN_Structures\PercentageRate.h" />
+    <ClInclude Include="..\ASN_Structures\per_decoder.h" />
+    <ClInclude Include="..\ASN_Structures\per_encoder.h" />
+    <ClInclude Include="..\ASN_Structures\per_opentype.h" />
+    <ClInclude Include="..\ASN_Structures\per_support.h" />
+    <ClInclude Include="..\ASN_Structures\PlmnId.h" />
+    <ClInclude Include="..\ASN_Structures\PositioningMethod.h" />
+    <ClInclude Include="..\ASN_Structures\PriorityCode.h" />
+    <ClInclude Include="..\ASN_Structures\PublicUserId.h" />
+    <ClInclude Include="..\ASN_Structures\RapFileSequenceNumber.h" />
+    <ClInclude Include="..\ASN_Structures\RecEntityCode.h" />
+    <ClInclude Include="..\ASN_Structures\RecEntityCodeList.h" />
+    <ClInclude Include="..\ASN_Structures\RecEntityId.h" />
+    <ClInclude Include="..\ASN_Structures\RecEntityInfoList.h" />
+    <ClInclude Include="..\ASN_Structures\RecEntityInformation.h" />
+    <ClInclude Include="..\ASN_Structures\RecEntityType.h" />
+    <ClInclude Include="..\ASN_Structures\Recipient.h" />
+    <ClInclude Include="..\ASN_Structures\ReleaseVersionNumber.h" />
+    <ClInclude Include="..\ASN_Structures\RequestedDeliveryTimeStamp.h" />
+    <ClInclude Include="..\ASN_Structures\RequestedDestination.h" />
+    <ClInclude Include="..\ASN_Structures\RequestedNumber.h" />
+    <ClInclude Include="..\ASN_Structures\RequestedPublicUserId.h" />
+    <ClInclude Include="..\ASN_Structures\ResponseTime.h" />
+    <ClInclude Include="..\ASN_Structures\ResponseTimeCategory.h" />
+    <ClInclude Include="..\ASN_Structures\ScuBasicInformation.h" />
+    <ClInclude Include="..\ASN_Structures\ScuChargeableSubscriber.h" />
+    <ClInclude Include="..\ASN_Structures\ScuChargeType.h" />
+    <ClInclude Include="..\ASN_Structures\ScuTimeStamps.h" />
+    <ClInclude Include="..\ASN_Structures\Sender.h" />
+    <ClInclude Include="..\ASN_Structures\ServiceCentreUsage.h" />
+    <ClInclude Include="..\ASN_Structures\ServiceStartTimestamp.h" />
+    <ClInclude Include="..\ASN_Structures\ServingBid.h" />
+    <ClInclude Include="..\ASN_Structures\ServingLocationDescription.h" />
+    <ClInclude Include="..\ASN_Structures\ServingNetwork.h" />
+    <ClInclude Include="..\ASN_Structures\ServingPartiesInformation.h" />
+    <ClInclude Include="..\ASN_Structures\SessionChargeInfoList.h" />
+    <ClInclude Include="..\ASN_Structures\SessionChargeInformation.h" />
+    <ClInclude Include="..\ASN_Structures\SimChargeableSubscriber.h" />
+    <ClInclude Include="..\ASN_Structures\SimToolkitIndicator.h" />
+    <ClInclude Include="..\ASN_Structures\SMSDestinationNumber.h" />
+    <ClInclude Include="..\ASN_Structures\SMSOriginator.h" />
+    <ClInclude Include="..\ASN_Structures\SpecificationVersionNumber.h" />
+    <ClInclude Include="..\ASN_Structures\SsParameters.h" />
+    <ClInclude Include="..\ASN_Structures\SupplServiceActionCode.h" />
+    <ClInclude Include="..\ASN_Structures\SupplServiceCode.h" />
+    <ClInclude Include="..\ASN_Structures\SupplServiceEvent.h" />
+    <ClInclude Include="..\ASN_Structures\SupplServiceUsed.h" />
+    <ClInclude Include="..\ASN_Structures\TapCurrency.h" />
+    <ClInclude Include="..\ASN_Structures\TapDecimalPlaces.h" />
+    <ClInclude Include="..\ASN_Structures\TaxableAmount.h" />
+    <ClInclude Include="..\ASN_Structures\Taxation.h" />
+    <ClInclude Include="..\ASN_Structures\TaxationList.h" />
+    <ClInclude Include="..\ASN_Structures\TaxCode.h" />
+    <ClInclude Include="..\ASN_Structures\TaxIndicator.h" />
+    <ClInclude Include="..\ASN_Structures\TaxInformation.h" />
+    <ClInclude Include="..\ASN_Structures\TaxInformationList.h" />
+    <ClInclude Include="..\ASN_Structures\TaxRate.h" />
+    <ClInclude Include="..\ASN_Structures\TaxType.h" />
+    <ClInclude Include="..\ASN_Structures\TaxValue.h" />
+    <ClInclude Include="..\ASN_Structures\TeleServiceCode.h" />
+    <ClInclude Include="..\ASN_Structures\ThirdPartyInformation.h" />
+    <ClInclude Include="..\ASN_Structures\ThirdPartyNumber.h" />
+    <ClInclude Include="..\ASN_Structures\ThreeGcamelDestination.h" />
+    <ClInclude Include="..\ASN_Structures\TotalAdvisedCharge.h" />
+    <ClInclude Include="..\ASN_Structures\TotalAdvisedChargeRefund.h" />
+    <ClInclude Include="..\ASN_Structures\TotalAdvisedChargeValue.h" />
+    <ClInclude Include="..\ASN_Structures\TotalAdvisedChargeValueList.h" />
+    <ClInclude Include="..\ASN_Structures\TotalCallEventDuration.h" />
+    <ClInclude Include="..\ASN_Structures\TotalCharge.h" />
+    <ClInclude Include="..\ASN_Structures\TotalChargeRefund.h" />
+    <ClInclude Include="..\ASN_Structures\TotalCommission.h" />
+    <ClInclude Include="..\ASN_Structures\TotalCommissionRefund.h" />
+    <ClInclude Include="..\ASN_Structures\TotalDataVolume.h" />
+    <ClInclude Include="..\ASN_Structures\TotalDiscountRefund.h" />
+    <ClInclude Include="..\ASN_Structures\TotalDiscountValue.h" />
+    <ClInclude Include="..\ASN_Structures\TotalTaxRefund.h" />
+    <ClInclude Include="..\ASN_Structures\TotalTaxValue.h" />
+    <ClInclude Include="..\ASN_Structures\TotalTransactionDuration.h" />
+    <ClInclude Include="..\ASN_Structures\TrackedCustomerEquipment.h" />
+    <ClInclude Include="..\ASN_Structures\TrackedCustomerHomeId.h" />
+    <ClInclude Include="..\ASN_Structures\TrackedCustomerHomeIdList.h" />
+    <ClInclude Include="..\ASN_Structures\TrackedCustomerIdentification.h" />
+    <ClInclude Include="..\ASN_Structures\TrackedCustomerIdList.h" />
+    <ClInclude Include="..\ASN_Structures\TrackedCustomerInformation.h" />
+    <ClInclude Include="..\ASN_Structures\TrackedCustomerLocation.h" />
+    <ClInclude Include="..\ASN_Structures\TrackedCustomerLocList.h" />
+    <ClInclude Include="..\ASN_Structures\TrackingCustomerEquipment.h" />
+    <ClInclude Include="..\ASN_Structures\TrackingCustomerHomeId.h" />
+    <ClInclude Include="..\ASN_Structures\TrackingCustomerHomeIdList.h" />
+    <ClInclude Include="..\ASN_Structures\TrackingCustomerIdentification.h" />
+    <ClInclude Include="..\ASN_Structures\TrackingCustomerIdList.h" />
+    <ClInclude Include="..\ASN_Structures\TrackingCustomerInformation.h" />
+    <ClInclude Include="..\ASN_Structures\TrackingCustomerLocation.h" />
+    <ClInclude Include="..\ASN_Structures\TrackingCustomerLocList.h" />
+    <ClInclude Include="..\ASN_Structures\TrackingFrequency.h" />
+    <ClInclude Include="..\ASN_Structures\TrackingPeriod.h" />
+    <ClInclude Include="..\ASN_Structures\TransactionAuthCode.h" />
+    <ClInclude Include="..\ASN_Structures\TransactionDescriptionSupp.h" />
+    <ClInclude Include="..\ASN_Structures\TransactionDetailDescription.h" />
+    <ClInclude Include="..\ASN_Structures\TransactionIdentifier.h" />
+    <ClInclude Include="..\ASN_Structures\TransactionShortDescription.h" />
+    <ClInclude Include="..\ASN_Structures\TransactionStatus.h" />
+    <ClInclude Include="..\ASN_Structures\TransferBatch.h" />
+    <ClInclude Include="..\ASN_Structures\TransferCutOffTimeStamp.h" />
+    <ClInclude Include="..\ASN_Structures\TransparencyIndicator.h" />
+    <ClInclude Include="..\ASN_Structures\UserProtocolIndicator.h" />
+    <ClInclude Include="..\ASN_Structures\UtcTimeOffset.h" />
+    <ClInclude Include="..\ASN_Structures\UtcTimeOffsetCode.h" />
+    <ClInclude Include="..\ASN_Structures\UtcTimeOffsetInfo.h" />
+    <ClInclude Include="..\ASN_Structures\UtcTimeOffsetInfoList.h" />
+    <ClInclude Include="..\ASN_Structures\VerticalAccuracyDelivered.h" />
+    <ClInclude Include="..\ASN_Structures\VerticalAccuracyRequested.h" />
+    <ClInclude Include="..\ASN_Structures\xer_decoder.h" />
+    <ClInclude Include="..\ASN_Structures\xer_encoder.h" />
+    <ClInclude Include="..\ASN_Structures\xer_support.h" />
+    <ClInclude Include="..\RAP_ASN_Structures\AccountingInfoError.h" />
+    <ClInclude Include="..\RAP_ASN_Structures\AckFileAvailableTimeStamp.h" />
+    <ClInclude Include="..\RAP_ASN_Structures\AckFileCreationTimeStamp.h" />
+    <ClInclude Include="..\RAP_ASN_Structures\Acknowledgement.h" />
+    <ClInclude Include="..\RAP_ASN_Structures\AuditControlInfoError.h" />
+    <ClInclude Include="..\RAP_ASN_Structures\BatchControlError.h" />
+    <ClInclude Include="..\RAP_ASN_Structures\EndMissingSeqNumber.h" />
+    <ClInclude Include="..\RAP_ASN_Structures\ErrorCode.h" />
+    <ClInclude Include="..\RAP_ASN_Structures\ErrorContext.h" />
+    <ClInclude Include="..\RAP_ASN_Structures\ErrorContextList.h" />
+    <ClInclude Include="..\RAP_ASN_Structures\ErrorDetail.h" />
+    <ClInclude Include="..\RAP_ASN_Structures\ErrorDetailList.h" />
+    <ClInclude Include="..\RAP_ASN_Structures\FatalReturn.h" />
+    <ClInclude Include="..\RAP_ASN_Structures\ItemLevel.h" />
+    <ClInclude Include="..\RAP_ASN_Structures\ItemOccurrence.h" />
+    <ClInclude Include="..\RAP_ASN_Structures\ItemOffset.h" />
+    <ClInclude Include="..\RAP_ASN_Structures\LastSeqNumber.h" />
+    <ClInclude Include="..\RAP_ASN_Structures\MessageDescriptionError.h" />
+    <ClInclude Include="..\RAP_ASN_Structures\MessageDescriptionInformationDefinition.h" />
+    <ClInclude Include="..\RAP_ASN_Structures\MissingReturn.h" />
+    <ClInclude Include="..\RAP_ASN_Structures\NetworkInfoError.h" />
+    <ClInclude Include="..\RAP_ASN_Structures\NotificationError.h" />
+    <ClInclude Include="..\RAP_ASN_Structures\OperatorSpecList.h" />
+    <ClInclude Include="..\RAP_ASN_Structures\PathItemId.h" />
+    <ClInclude Include="..\RAP_ASN_Structures\RapAuditControlInfo.h" />
+    <ClInclude Include="..\RAP_ASN_Structures\RapBatchControlInfo.h" />
+    <ClInclude Include="..\RAP_ASN_Structures\RapDataInterChange.h" />
+    <ClInclude Include="..\RAP_ASN_Structures\RapFileAvailableTimeStamp.h" />
+    <ClInclude Include="..\RAP_ASN_Structures\RapFileCreationTimeStamp.h" />
+    <ClInclude Include="..\RAP_ASN_Structures\RapReleaseVersionNumber.h" />
+    <ClInclude Include="..\RAP_ASN_Structures\RapSpecificationVersionNumber.h" />
+    <ClInclude Include="..\RAP_ASN_Structures\ReturnBatch.h" />
+    <ClInclude Include="..\RAP_ASN_Structures\ReturnDetail.h" />
+    <ClInclude Include="..\RAP_ASN_Structures\ReturnDetailList.h" />
+    <ClInclude Include="..\RAP_ASN_Structures\ReturnDetailsCount.h" />
+    <ClInclude Include="..\RAP_ASN_Structures\RoamingPartner.h" />
+    <ClInclude Include="..\RAP_ASN_Structures\SevereReturn.h" />
+    <ClInclude Include="..\RAP_ASN_Structures\StartMissingSeqNumber.h" />
+    <ClInclude Include="..\RAP_ASN_Structures\StopReturn.h" />
+    <ClInclude Include="..\RAP_ASN_Structures\TotalSevereReturnTax.h" />
+    <ClInclude Include="..\RAP_ASN_Structures\TotalSevereReturnValue.h" />
+    <ClInclude Include="..\RAP_ASN_Structures\TransferBatchError.h" />
+    <ClInclude Include="..\TAP3_Writer\gpshare.h" />
+    <ClInclude Include="otlv4.h" />
+    <ClInclude Include="OTL_Header.h" />
+    <ClInclude Include="stdafx.h" />
+    <ClInclude Include="targetver.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\ConfigContainer.cpp" />
+    <ClCompile Include="..\ASN_Structures\AbsoluteAmount.c" />
+    <ClCompile Include="..\ASN_Structures\AccessPointNameNI.c" />
+    <ClCompile Include="..\ASN_Structures\AccessPointNameOI.c" />
+    <ClCompile Include="..\ASN_Structures\AccountingInfo.c" />
+    <ClCompile Include="..\ASN_Structures\ActualDeliveryTimeStamp.c" />
+    <ClCompile Include="..\ASN_Structures\AddressStringDigits.c" />
+    <ClCompile Include="..\ASN_Structures\AdvisedCharge.c" />
+    <ClCompile Include="..\ASN_Structures\AdvisedChargeCurrency.c" />
+    <ClCompile Include="..\ASN_Structures\AdvisedChargeInformation.c" />
+    <ClCompile Include="..\ASN_Structures\AgeOfLocation.c" />
+    <ClCompile Include="..\ASN_Structures\AsciiString.c" />
+    <ClCompile Include="..\ASN_Structures\asn_codecs_prim.c" />
+    <ClCompile Include="..\ASN_Structures\asn_SEQUENCE_OF.c" />
+    <ClCompile Include="..\ASN_Structures\asn_SET_OF.c" />
+    <ClCompile Include="..\ASN_Structures\AuditControlInfo.c" />
+    <ClCompile Include="..\ASN_Structures\BasicService.c" />
+    <ClCompile Include="..\ASN_Structures\BasicServiceCode.c" />
+    <ClCompile Include="..\ASN_Structures\BasicServiceCodeList.c" />
+    <ClCompile Include="..\ASN_Structures\BasicServiceUsed.c" />
+    <ClCompile Include="..\ASN_Structures\BasicServiceUsedList.c" />
+    <ClCompile Include="..\ASN_Structures\BatchControlInfo.c" />
+    <ClCompile Include="..\ASN_Structures\BCDString.c" />
+    <ClCompile Include="..\ASN_Structures\BearerServiceCode.c" />
+    <ClCompile Include="..\ASN_Structures\ber_decoder.c" />
+    <ClCompile Include="..\ASN_Structures\ber_tlv_length.c" />
+    <ClCompile Include="..\ASN_Structures\ber_tlv_tag.c" />
+    <ClCompile Include="..\ASN_Structures\Bid.c" />
+    <ClCompile Include="..\ASN_Structures\BIT_STRING.c" />
+    <ClCompile Include="..\ASN_Structures\CalledNumber.c" />
+    <ClCompile Include="..\ASN_Structures\CalledPlace.c" />
+    <ClCompile Include="..\ASN_Structures\CalledRegion.c" />
+    <ClCompile Include="..\ASN_Structures\CallEventDetail.c" />
+    <ClCompile Include="..\ASN_Structures\CallEventDetailList.c" />
+    <ClCompile Include="..\ASN_Structures\CallEventDetailsCount.c" />
+    <ClCompile Include="..\ASN_Structures\CallEventStartTimeStamp.c" />
+    <ClCompile Include="..\ASN_Structures\CallingNumber.c" />
+    <ClCompile Include="..\ASN_Structures\CallOriginator.c" />
+    <ClCompile Include="..\ASN_Structures\CallReference.c" />
+    <ClCompile Include="..\ASN_Structures\CallTypeGroup.c" />
+    <ClCompile Include="..\ASN_Structures\CallTypeLevel1.c" />
+    <ClCompile Include="..\ASN_Structures\CallTypeLevel2.c" />
+    <ClCompile Include="..\ASN_Structures\CallTypeLevel3.c" />
+    <ClCompile Include="..\ASN_Structures\CamelDestinationNumber.c" />
+    <ClCompile Include="..\ASN_Structures\CamelInvocationFee.c" />
+    <ClCompile Include="..\ASN_Structures\CamelServiceKey.c" />
+    <ClCompile Include="..\ASN_Structures\CamelServiceLevel.c" />
+    <ClCompile Include="..\ASN_Structures\CamelServiceUsed.c" />
+    <ClCompile Include="..\ASN_Structures\CauseForTerm.c" />
+    <ClCompile Include="..\ASN_Structures\CellId.c" />
+    <ClCompile Include="..\ASN_Structures\Charge.c" />
+    <ClCompile Include="..\ASN_Structures\ChargeableSubscriber.c" />
+    <ClCompile Include="..\ASN_Structures\ChargeableUnits.c" />
+    <ClCompile Include="..\ASN_Structures\ChargeDetail.c" />
+    <ClCompile Include="..\ASN_Structures\ChargeDetailList.c" />
+    <ClCompile Include="..\ASN_Structures\ChargeDetailTimeStamp.c" />
+    <ClCompile Include="..\ASN_Structures\ChargedItem.c" />
+    <ClCompile Include="..\ASN_Structures\ChargedParty.c" />
+    <ClCompile Include="..\ASN_Structures\ChargedPartyEquipment.c" />
+    <ClCompile Include="..\ASN_Structures\ChargedPartyHomeIdentification.c" />
+    <ClCompile Include="..\ASN_Structures\ChargedPartyHomeIdList.c" />
+    <ClCompile Include="..\ASN_Structures\ChargedPartyIdentification.c" />
+    <ClCompile Include="..\ASN_Structures\ChargedPartyIdentifier.c" />
+    <ClCompile Include="..\ASN_Structures\ChargedPartyIdList.c" />
+    <ClCompile Include="..\ASN_Structures\ChargedPartyIdType.c" />
+    <ClCompile Include="..\ASN_Structures\ChargedPartyInformation.c" />
+    <ClCompile Include="..\ASN_Structures\ChargedPartyLocation.c" />
+    <ClCompile Include="..\ASN_Structures\ChargedPartyLocationList.c" />
+    <ClCompile Include="..\ASN_Structures\ChargedPartyStatus.c" />
+    <ClCompile Include="..\ASN_Structures\ChargedUnits.c" />
+    <ClCompile Include="..\ASN_Structures\ChargeInformation.c" />
+    <ClCompile Include="..\ASN_Structures\ChargeInformationList.c" />
+    <ClCompile Include="..\ASN_Structures\ChargeRefundIndicator.c" />
+    <ClCompile Include="..\ASN_Structures\ChargeType.c" />
+    <ClCompile Include="..\ASN_Structures\ChargingId.c" />
+    <ClCompile Include="..\ASN_Structures\ChargingPoint.c" />
+    <ClCompile Include="..\ASN_Structures\ChargingTimeStamp.c" />
+    <ClCompile Include="..\ASN_Structures\ClirIndicator.c" />
+    <ClCompile Include="..\ASN_Structures\Code.c" />
+    <ClCompile Include="..\ASN_Structures\Commission.c" />
+    <ClCompile Include="..\ASN_Structures\CompletionTimeStamp.c" />
+    <ClCompile Include="..\ASN_Structures\constraints.c" />
+    <ClCompile Include="..\ASN_Structures\constr_CHOICE.c" />
+    <ClCompile Include="..\ASN_Structures\constr_SEQUENCE.c" />
+    <ClCompile Include="..\ASN_Structures\constr_SEQUENCE_OF.c" />
+    <ClCompile Include="..\ASN_Structures\constr_SET_OF.c" />
+    <ClCompile Include="..\ASN_Structures\constr_TYPE.c" />
+    <ClCompile Include="..\ASN_Structures\ContentChargingPoint.c" />
+    <ClCompile Include="..\ASN_Structures\ContentProvider.c" />
+    <ClCompile Include="..\ASN_Structures\ContentProviderIdentifier.c" />
+    <ClCompile Include="..\ASN_Structures\ContentProviderIdList.c" />
+    <ClCompile Include="..\ASN_Structures\ContentProviderIdType.c" />
+    <ClCompile Include="..\ASN_Structures\ContentProviderName.c" />
+    <ClCompile Include="..\ASN_Structures\ContentServiceUsed.c" />
+    <ClCompile Include="..\ASN_Structures\ContentServiceUsedList.c" />
+    <ClCompile Include="..\ASN_Structures\ContentTransaction.c" />
+    <ClCompile Include="..\ASN_Structures\ContentTransactionBasicInfo.c" />
+    <ClCompile Include="..\ASN_Structures\ContentTransactionCode.c" />
+    <ClCompile Include="..\ASN_Structures\ContentTransactionType.c" />
+    <ClCompile Include="..\ASN_Structures\CseInformation.c" />
+    <ClCompile Include="..\ASN_Structures\Currency.c" />
+    <ClCompile Include="..\ASN_Structures\CurrencyConversion.c" />
+    <ClCompile Include="..\ASN_Structures\CurrencyConversionList.c" />
+    <ClCompile Include="..\ASN_Structures\CustomerIdentifier.c" />
+    <ClCompile Include="..\ASN_Structures\CustomerIdType.c" />
+    <ClCompile Include="..\ASN_Structures\DataInterChange.c" />
+    <ClCompile Include="..\ASN_Structures\DataVolume.c" />
+    <ClCompile Include="..\ASN_Structures\DataVolumeIncoming.c" />
+    <ClCompile Include="..\ASN_Structures\DataVolumeOutgoing.c" />
+    <ClCompile Include="..\ASN_Structures\DateTime.c" />
+    <ClCompile Include="..\ASN_Structures\DateTimeLong.c" />
+    <ClCompile Include="..\ASN_Structures\DefaultCallHandlingIndicator.c" />
+    <ClCompile Include="..\ASN_Structures\DepositTimeStamp.c" />
+    <ClCompile Include="..\ASN_Structures\der_encoder.c" />
+    <ClCompile Include="..\ASN_Structures\Destination.c" />
+    <ClCompile Include="..\ASN_Structures\DestinationNetwork.c" />
+    <ClCompile Include="..\ASN_Structures\DialledDigits.c" />
+    <ClCompile Include="..\ASN_Structures\Discount.c" />
+    <ClCompile Include="..\ASN_Structures\DiscountableAmount.c" />
+    <ClCompile Include="..\ASN_Structures\DiscountApplied.c" />
+    <ClCompile Include="..\ASN_Structures\DiscountCode.c" />
+    <ClCompile Include="..\ASN_Structures\DiscountInformation.c" />
+    <ClCompile Include="..\ASN_Structures\Discounting.c" />
+    <ClCompile Include="..\ASN_Structures\DiscountingList.c" />
+    <ClCompile Include="..\ASN_Structures\DiscountRate.c" />
+    <ClCompile Include="..\ASN_Structures\DiscountValue.c" />
+    <ClCompile Include="..\ASN_Structures\DistanceChargeBandCode.c" />
+    <ClCompile Include="..\ASN_Structures\EarliestCallTimeStamp.c" />
+    <ClCompile Include="..\ASN_Structures\ElementId.c" />
+    <ClCompile Include="..\ASN_Structures\ElementType.c" />
+    <ClCompile Include="..\ASN_Structures\EquipmentId.c" />
+    <ClCompile Include="..\ASN_Structures\EquipmentIdType.c" />
+    <ClCompile Include="..\ASN_Structures\Esn.c" />
+    <ClCompile Include="..\ASN_Structures\EventReference.c" />
+    <ClCompile Include="..\ASN_Structures\ExchangeRate.c" />
+    <ClCompile Include="..\ASN_Structures\ExchangeRateCode.c" />
+    <ClCompile Include="..\ASN_Structures\FileAvailableTimeStamp.c" />
+    <ClCompile Include="..\ASN_Structures\FileCreationTimeStamp.c" />
+    <ClCompile Include="..\ASN_Structures\FileSequenceNumber.c" />
+    <ClCompile Include="..\ASN_Structures\FileTypeIndicator.c" />
+    <ClCompile Include="..\ASN_Structures\FixedDiscountValue.c" />
+    <ClCompile Include="..\ASN_Structures\Fnur.c" />
+    <ClCompile Include="..\ASN_Structures\GeographicalLocation.c" />
+    <ClCompile Include="..\ASN_Structures\GprsBasicCallInformation.c" />
+    <ClCompile Include="..\ASN_Structures\GprsCall.c" />
+    <ClCompile Include="..\ASN_Structures\GprsChargeableSubscriber.c" />
+    <ClCompile Include="..\ASN_Structures\GprsDestination.c" />
+    <ClCompile Include="..\ASN_Structures\GprsLocationInformation.c" />
+    <ClCompile Include="..\ASN_Structures\GprsNetworkLocation.c" />
+    <ClCompile Include="..\ASN_Structures\GprsServiceUsed.c" />
+    <ClCompile Include="..\ASN_Structures\GsmChargeableSubscriber.c" />
+    <ClCompile Include="..\ASN_Structures\GuaranteedBitRate.c" />
+    <ClCompile Include="..\ASN_Structures\HexString.c" />
+    <ClCompile Include="..\ASN_Structures\HomeBid.c" />
+    <ClCompile Include="..\ASN_Structures\HomeIdentifier.c" />
+    <ClCompile Include="..\ASN_Structures\HomeIdType.c" />
+    <ClCompile Include="..\ASN_Structures\HomeLocationDescription.c" />
+    <ClCompile Include="..\ASN_Structures\HomeLocationInformation.c" />
+    <ClCompile Include="..\ASN_Structures\HorizontalAccuracyDelivered.c" />
+    <ClCompile Include="..\ASN_Structures\HorizontalAccuracyRequested.c" />
+    <ClCompile Include="..\ASN_Structures\HSCSDIndicator.c" />
+    <ClCompile Include="..\ASN_Structures\Imei.c" />
+    <ClCompile Include="..\ASN_Structures\ImeiOrEsn.c" />
+    <ClCompile Include="..\ASN_Structures\Imsi.c" />
+    <ClCompile Include="..\ASN_Structures\IMSSignallingContext.c" />
+    <ClCompile Include="..\ASN_Structures\INTEGER.c" />
+    <ClCompile Include="..\ASN_Structures\InternetServiceProvider.c" />
+    <ClCompile Include="..\ASN_Structures\InternetServiceProviderIdList.c" />
+    <ClCompile Include="..\ASN_Structures\IspIdentifier.c" />
+    <ClCompile Include="..\ASN_Structures\IspIdType.c" />
+    <ClCompile Include="..\ASN_Structures\ISPList.c" />
+    <ClCompile Include="..\ASN_Structures\LatestCallTimeStamp.c" />
+    <ClCompile Include="..\ASN_Structures\LCSQosDelivered.c" />
+    <ClCompile Include="..\ASN_Structures\LCSQosRequested.c" />
+    <ClCompile Include="..\ASN_Structures\LCSRequestTimestamp.c" />
+    <ClCompile Include="..\ASN_Structures\LCSSPIdentification.c" />
+    <ClCompile Include="..\ASN_Structures\LCSSPIdentificationList.c" />
+    <ClCompile Include="..\ASN_Structures\LCSSPInformation.c" />
+    <ClCompile Include="..\ASN_Structures\LCSTransactionStatus.c" />
+    <ClCompile Include="..\ASN_Structures\LocalCurrency.c" />
+    <ClCompile Include="..\ASN_Structures\LocalTimeStamp.c" />
+    <ClCompile Include="..\ASN_Structures\LocationArea.c" />
+    <ClCompile Include="..\ASN_Structures\LocationDescription.c" />
+    <ClCompile Include="..\ASN_Structures\LocationIdentifier.c" />
+    <ClCompile Include="..\ASN_Structures\LocationIdType.c" />
+    <ClCompile Include="..\ASN_Structures\LocationInformation.c" />
+    <ClCompile Include="..\ASN_Structures\LocationService.c" />
+    <ClCompile Include="..\ASN_Structures\LocationServiceUsage.c" />
+    <ClCompile Include="..\ASN_Structures\MaximumBitRate.c" />
+    <ClCompile Include="..\ASN_Structures\Mdn.c" />
+    <ClCompile Include="..\ASN_Structures\MessageDescription.c" />
+    <ClCompile Include="..\ASN_Structures\MessageDescriptionCode.c" />
+    <ClCompile Include="..\ASN_Structures\MessageDescriptionInfoList.c" />
+    <ClCompile Include="..\ASN_Structures\MessageDescriptionInformation.c" />
+    <ClCompile Include="..\ASN_Structures\MessageStatus.c" />
+    <ClCompile Include="..\ASN_Structures\MessageType.c" />
+    <ClCompile Include="..\ASN_Structures\MessagingEvent.c" />
+    <ClCompile Include="..\ASN_Structures\MessagingEventService.c" />
+    <ClCompile Include="..\ASN_Structures\Min.c" />
+    <ClCompile Include="..\ASN_Structures\MinChargeableSubscriber.c" />
+    <ClCompile Include="..\ASN_Structures\MoBasicCallInformation.c" />
+    <ClCompile Include="..\ASN_Structures\MobileOriginatedCall.c" />
+    <ClCompile Include="..\ASN_Structures\MobileSession.c" />
+    <ClCompile Include="..\ASN_Structures\MobileSessionService.c" />
+    <ClCompile Include="..\ASN_Structures\MobileTerminatedCall.c" />
+    <ClCompile Include="..\ASN_Structures\Msisdn.c" />
+    <ClCompile Include="..\ASN_Structures\MtBasicCallInformation.c" />
+    <ClCompile Include="..\ASN_Structures\NativeEnumerated.c" />
+    <ClCompile Include="..\ASN_Structures\NativeInteger.c" />
+    <ClCompile Include="..\ASN_Structures\Network.c" />
+    <ClCompile Include="..\ASN_Structures\NetworkAccessIdentifier.c" />
+    <ClCompile Include="..\ASN_Structures\NetworkElement.c" />
+    <ClCompile Include="..\ASN_Structures\NetworkElementList.c" />
+    <ClCompile Include="..\ASN_Structures\NetworkId.c" />
+    <ClCompile Include="..\ASN_Structures\NetworkIdentifier.c" />
+    <ClCompile Include="..\ASN_Structures\NetworkIdType.c" />
+    <ClCompile Include="..\ASN_Structures\NetworkInfo.c" />
+    <ClCompile Include="..\ASN_Structures\NetworkInitPDPContext.c" />
+    <ClCompile Include="..\ASN_Structures\NetworkList.c" />
+    <ClCompile Include="..\ASN_Structures\NetworkLocation.c" />
+    <ClCompile Include="..\ASN_Structures\NonChargedNumber.c" />
+    <ClCompile Include="..\ASN_Structures\NonChargedParty.c" />
+    <ClCompile Include="..\ASN_Structures\NonChargedPartyNumber.c" />
+    <ClCompile Include="..\ASN_Structures\NonChargedPublicUserId.c" />
+    <ClCompile Include="..\ASN_Structures\Notification.c" />
+    <ClCompile Include="..\ASN_Structures\NumberOfDecimalPlaces.c" />
+    <ClCompile Include="..\ASN_Structures\NumberString.c" />
+    <ClCompile Include="..\ASN_Structures\ObjectType.c" />
+    <ClCompile Include="..\ASN_Structures\OCTET_STRING.c" />
+    <ClCompile Include="..\ASN_Structures\OperatorSpecInfoList.c" />
+    <ClCompile Include="..\ASN_Structures\OperatorSpecInformation.c" />
+    <ClCompile Include="..\ASN_Structures\OrderPlacedTimeStamp.c" />
+    <ClCompile Include="..\ASN_Structures\OriginatingNetwork.c" />
+    <ClCompile Include="..\ASN_Structures\PacketDataProtocolAddress.c" />
+    <ClCompile Include="..\ASN_Structures\PaidIndicator.c" />
+    <ClCompile Include="..\ASN_Structures\PartialTypeIndicator.c" />
+    <ClCompile Include="..\ASN_Structures\PaymentMethod.c" />
+    <ClCompile Include="..\ASN_Structures\PdpAddress.c" />
+    <ClCompile Include="..\ASN_Structures\PDPContextStartTimestamp.c" />
+    <ClCompile Include="..\ASN_Structures\PercentageRate.c" />
+    <ClCompile Include="..\ASN_Structures\per_decoder.c" />
+    <ClCompile Include="..\ASN_Structures\per_encoder.c" />
+    <ClCompile Include="..\ASN_Structures\per_opentype.c" />
+    <ClCompile Include="..\ASN_Structures\per_support.c" />
+    <ClCompile Include="..\ASN_Structures\PlmnId.c" />
+    <ClCompile Include="..\ASN_Structures\PositioningMethod.c" />
+    <ClCompile Include="..\ASN_Structures\PriorityCode.c" />
+    <ClCompile Include="..\ASN_Structures\PublicUserId.c" />
+    <ClCompile Include="..\ASN_Structures\RapFileSequenceNumber.c" />
+    <ClCompile Include="..\ASN_Structures\RecEntityCode.c" />
+    <ClCompile Include="..\ASN_Structures\RecEntityCodeList.c" />
+    <ClCompile Include="..\ASN_Structures\RecEntityId.c" />
+    <ClCompile Include="..\ASN_Structures\RecEntityInfoList.c" />
+    <ClCompile Include="..\ASN_Structures\RecEntityInformation.c" />
+    <ClCompile Include="..\ASN_Structures\RecEntityType.c" />
+    <ClCompile Include="..\ASN_Structures\Recipient.c" />
+    <ClCompile Include="..\ASN_Structures\ReleaseVersionNumber.c" />
+    <ClCompile Include="..\ASN_Structures\RequestedDeliveryTimeStamp.c" />
+    <ClCompile Include="..\ASN_Structures\RequestedDestination.c" />
+    <ClCompile Include="..\ASN_Structures\RequestedNumber.c" />
+    <ClCompile Include="..\ASN_Structures\RequestedPublicUserId.c" />
+    <ClCompile Include="..\ASN_Structures\ResponseTime.c" />
+    <ClCompile Include="..\ASN_Structures\ResponseTimeCategory.c" />
+    <ClCompile Include="..\ASN_Structures\ScuBasicInformation.c" />
+    <ClCompile Include="..\ASN_Structures\ScuChargeableSubscriber.c" />
+    <ClCompile Include="..\ASN_Structures\ScuChargeType.c" />
+    <ClCompile Include="..\ASN_Structures\ScuTimeStamps.c" />
+    <ClCompile Include="..\ASN_Structures\Sender.c" />
+    <ClCompile Include="..\ASN_Structures\ServiceCentreUsage.c" />
+    <ClCompile Include="..\ASN_Structures\ServiceStartTimestamp.c" />
+    <ClCompile Include="..\ASN_Structures\ServingBid.c" />
+    <ClCompile Include="..\ASN_Structures\ServingLocationDescription.c" />
+    <ClCompile Include="..\ASN_Structures\ServingNetwork.c" />
+    <ClCompile Include="..\ASN_Structures\ServingPartiesInformation.c" />
+    <ClCompile Include="..\ASN_Structures\SessionChargeInfoList.c" />
+    <ClCompile Include="..\ASN_Structures\SessionChargeInformation.c" />
+    <ClCompile Include="..\ASN_Structures\SimChargeableSubscriber.c" />
+    <ClCompile Include="..\ASN_Structures\SimToolkitIndicator.c" />
+    <ClCompile Include="..\ASN_Structures\SMSDestinationNumber.c" />
+    <ClCompile Include="..\ASN_Structures\SMSOriginator.c" />
+    <ClCompile Include="..\ASN_Structures\SpecificationVersionNumber.c" />
+    <ClCompile Include="..\ASN_Structures\SsParameters.c" />
+    <ClCompile Include="..\ASN_Structures\SupplServiceActionCode.c" />
+    <ClCompile Include="..\ASN_Structures\SupplServiceCode.c" />
+    <ClCompile Include="..\ASN_Structures\SupplServiceEvent.c" />
+    <ClCompile Include="..\ASN_Structures\SupplServiceUsed.c" />
+    <ClCompile Include="..\ASN_Structures\TapCurrency.c" />
+    <ClCompile Include="..\ASN_Structures\TapDecimalPlaces.c" />
+    <ClCompile Include="..\ASN_Structures\TaxableAmount.c" />
+    <ClCompile Include="..\ASN_Structures\Taxation.c" />
+    <ClCompile Include="..\ASN_Structures\TaxationList.c" />
+    <ClCompile Include="..\ASN_Structures\TaxCode.c" />
+    <ClCompile Include="..\ASN_Structures\TaxIndicator.c" />
+    <ClCompile Include="..\ASN_Structures\TaxInformation.c" />
+    <ClCompile Include="..\ASN_Structures\TaxInformationList.c" />
+    <ClCompile Include="..\ASN_Structures\TaxRate.c" />
+    <ClCompile Include="..\ASN_Structures\TaxType.c" />
+    <ClCompile Include="..\ASN_Structures\TaxValue.c" />
+    <ClCompile Include="..\ASN_Structures\TeleServiceCode.c" />
+    <ClCompile Include="..\ASN_Structures\ThirdPartyInformation.c" />
+    <ClCompile Include="..\ASN_Structures\ThirdPartyNumber.c" />
+    <ClCompile Include="..\ASN_Structures\ThreeGcamelDestination.c" />
+    <ClCompile Include="..\ASN_Structures\TotalAdvisedCharge.c" />
+    <ClCompile Include="..\ASN_Structures\TotalAdvisedChargeRefund.c" />
+    <ClCompile Include="..\ASN_Structures\TotalAdvisedChargeValue.c" />
+    <ClCompile Include="..\ASN_Structures\TotalAdvisedChargeValueList.c" />
+    <ClCompile Include="..\ASN_Structures\TotalCallEventDuration.c" />
+    <ClCompile Include="..\ASN_Structures\TotalCharge.c" />
+    <ClCompile Include="..\ASN_Structures\TotalChargeRefund.c" />
+    <ClCompile Include="..\ASN_Structures\TotalCommission.c" />
+    <ClCompile Include="..\ASN_Structures\TotalCommissionRefund.c" />
+    <ClCompile Include="..\ASN_Structures\TotalDataVolume.c" />
+    <ClCompile Include="..\ASN_Structures\TotalDiscountRefund.c" />
+    <ClCompile Include="..\ASN_Structures\TotalDiscountValue.c" />
+    <ClCompile Include="..\ASN_Structures\TotalTaxRefund.c" />
+    <ClCompile Include="..\ASN_Structures\TotalTaxValue.c" />
+    <ClCompile Include="..\ASN_Structures\TotalTransactionDuration.c" />
+    <ClCompile Include="..\ASN_Structures\TrackedCustomerEquipment.c" />
+    <ClCompile Include="..\ASN_Structures\TrackedCustomerHomeId.c" />
+    <ClCompile Include="..\ASN_Structures\TrackedCustomerHomeIdList.c" />
+    <ClCompile Include="..\ASN_Structures\TrackedCustomerIdentification.c" />
+    <ClCompile Include="..\ASN_Structures\TrackedCustomerIdList.c" />
+    <ClCompile Include="..\ASN_Structures\TrackedCustomerInformation.c" />
+    <ClCompile Include="..\ASN_Structures\TrackedCustomerLocation.c" />
+    <ClCompile Include="..\ASN_Structures\TrackedCustomerLocList.c" />
+    <ClCompile Include="..\ASN_Structures\TrackingCustomerEquipment.c" />
+    <ClCompile Include="..\ASN_Structures\TrackingCustomerHomeId.c" />
+    <ClCompile Include="..\ASN_Structures\TrackingCustomerHomeIdList.c" />
+    <ClCompile Include="..\ASN_Structures\TrackingCustomerIdentification.c" />
+    <ClCompile Include="..\ASN_Structures\TrackingCustomerIdList.c" />
+    <ClCompile Include="..\ASN_Structures\TrackingCustomerInformation.c" />
+    <ClCompile Include="..\ASN_Structures\TrackingCustomerLocation.c" />
+    <ClCompile Include="..\ASN_Structures\TrackingCustomerLocList.c" />
+    <ClCompile Include="..\ASN_Structures\TrackingFrequency.c" />
+    <ClCompile Include="..\ASN_Structures\TrackingPeriod.c" />
+    <ClCompile Include="..\ASN_Structures\TransactionAuthCode.c" />
+    <ClCompile Include="..\ASN_Structures\TransactionDescriptionSupp.c" />
+    <ClCompile Include="..\ASN_Structures\TransactionDetailDescription.c" />
+    <ClCompile Include="..\ASN_Structures\TransactionIdentifier.c" />
+    <ClCompile Include="..\ASN_Structures\TransactionShortDescription.c" />
+    <ClCompile Include="..\ASN_Structures\TransactionStatus.c" />
+    <ClCompile Include="..\ASN_Structures\TransferBatch.c" />
+    <ClCompile Include="..\ASN_Structures\TransferCutOffTimeStamp.c" />
+    <ClCompile Include="..\ASN_Structures\TransparencyIndicator.c" />
+    <ClCompile Include="..\ASN_Structures\UserProtocolIndicator.c" />
+    <ClCompile Include="..\ASN_Structures\UtcTimeOffset.c" />
+    <ClCompile Include="..\ASN_Structures\UtcTimeOffsetCode.c" />
+    <ClCompile Include="..\ASN_Structures\UtcTimeOffsetInfo.c" />
+    <ClCompile Include="..\ASN_Structures\UtcTimeOffsetInfoList.c" />
+    <ClCompile Include="..\ASN_Structures\VerticalAccuracyDelivered.c" />
+    <ClCompile Include="..\ASN_Structures\VerticalAccuracyRequested.c" />
+    <ClCompile Include="..\ASN_Structures\xer_decoder.c" />
+    <ClCompile Include="..\ASN_Structures\xer_encoder.c" />
+    <ClCompile Include="..\ASN_Structures\xer_support.c" />
+    <ClCompile Include="..\RAP_ASN_Structures\AccountingInfoError.c" />
+    <ClCompile Include="..\RAP_ASN_Structures\AckFileAvailableTimeStamp.c" />
+    <ClCompile Include="..\RAP_ASN_Structures\AckFileCreationTimeStamp.c" />
+    <ClCompile Include="..\RAP_ASN_Structures\Acknowledgement.c" />
+    <ClCompile Include="..\RAP_ASN_Structures\AuditControlInfoError.c" />
+    <ClCompile Include="..\RAP_ASN_Structures\BatchControlError.c" />
+    <ClCompile Include="..\RAP_ASN_Structures\EndMissingSeqNumber.c" />
+    <ClCompile Include="..\RAP_ASN_Structures\ErrorCode.c" />
+    <ClCompile Include="..\RAP_ASN_Structures\ErrorContext.c" />
+    <ClCompile Include="..\RAP_ASN_Structures\ErrorContextList.c" />
+    <ClCompile Include="..\RAP_ASN_Structures\ErrorDetail.c" />
+    <ClCompile Include="..\RAP_ASN_Structures\ErrorDetailList.c" />
+    <ClCompile Include="..\RAP_ASN_Structures\FatalReturn.c" />
+    <ClCompile Include="..\RAP_ASN_Structures\ItemLevel.c" />
+    <ClCompile Include="..\RAP_ASN_Structures\ItemOccurrence.c" />
+    <ClCompile Include="..\RAP_ASN_Structures\ItemOffset.c" />
+    <ClCompile Include="..\RAP_ASN_Structures\LastSeqNumber.c" />
+    <ClCompile Include="..\RAP_ASN_Structures\MessageDescriptionError.c" />
+    <ClCompile Include="..\RAP_ASN_Structures\MessageDescriptionInformationDefinition.c" />
+    <ClCompile Include="..\RAP_ASN_Structures\MissingReturn.c" />
+    <ClCompile Include="..\RAP_ASN_Structures\NetworkInfoError.c" />
+    <ClCompile Include="..\RAP_ASN_Structures\NotificationError.c" />
+    <ClCompile Include="..\RAP_ASN_Structures\OperatorSpecList.c" />
+    <ClCompile Include="..\RAP_ASN_Structures\PathItemId.c" />
+    <ClCompile Include="..\RAP_ASN_Structures\RapAuditControlInfo.c" />
+    <ClCompile Include="..\RAP_ASN_Structures\RapBatchControlInfo.c" />
+    <ClCompile Include="..\RAP_ASN_Structures\RapDataInterChange.c" />
+    <ClCompile Include="..\RAP_ASN_Structures\RapFileAvailableTimeStamp.c" />
+    <ClCompile Include="..\RAP_ASN_Structures\RapFileCreationTimeStamp.c" />
+    <ClCompile Include="..\RAP_ASN_Structures\RapReleaseVersionNumber.c" />
+    <ClCompile Include="..\RAP_ASN_Structures\RapSpecificationVersionNumber.c" />
+    <ClCompile Include="..\RAP_ASN_Structures\ReturnBatch.c" />
+    <ClCompile Include="..\RAP_ASN_Structures\ReturnDetail.c" />
+    <ClCompile Include="..\RAP_ASN_Structures\ReturnDetailList.c" />
+    <ClCompile Include="..\RAP_ASN_Structures\ReturnDetailsCount.c" />
+    <ClCompile Include="..\RAP_ASN_Structures\RoamingPartner.c" />
+    <ClCompile Include="..\RAP_ASN_Structures\SevereReturn.c" />
+    <ClCompile Include="..\RAP_ASN_Structures\StartMissingSeqNumber.c" />
+    <ClCompile Include="..\RAP_ASN_Structures\StopReturn.c" />
+    <ClCompile Include="..\RAP_ASN_Structures\TotalSevereReturnTax.c" />
+    <ClCompile Include="..\RAP_ASN_Structures\TotalSevereReturnValue.c" />
+    <ClCompile Include="..\RAP_ASN_Structures\TransferBatchError.c" />
+    <ClCompile Include="..\TAP3_Writer\gpshare.c" />
+    <ClCompile Include="..\TAP3_Writer\ncftpput.c" />
+    <ClCompile Include="stdafx.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug RAP|Win32'">Create</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='DLL Release|Win32'">Create</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="TAP3.12c.cpp" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>
