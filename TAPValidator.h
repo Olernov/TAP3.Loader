@@ -81,7 +81,7 @@ class RAPFile
 {
 public:
 	RAPFile(otl_connect&, Config&);
-	int CreateRAPFile(ReturnBatch* returnBatch, ReturnDetail* returnDetail, string sender, string recipient,
+	int CreateRAPFile(ReturnBatch* returnBatch, ReturnDetail* returnDetail, long roamingHubID, string sender, string recipient,
 		string tapAvailableStamp, string fileTypeIndicator, long& rapFileID, string& rapFilename);
 private:
 	otl_connect& m_otlConnect;
@@ -97,7 +97,7 @@ class TAPValidator
 {
 public:
 	TAPValidator(otl_connect&, Config&);
-	TAPValidationResult Validate(DataInterChange*);
+	TAPValidationResult Validate(DataInterChange*, long);
 	long GetRapFileID();
 	string GetRapSequenceNum();
 private:
@@ -108,6 +108,7 @@ private:
 	Notification* m_notification;
 
 	long m_rapFileID;
+	long m_roamingHubID;
 	string m_rapSequenceNum;
 
 	bool IsRecipientCorrect(string recipient);

@@ -18,7 +18,7 @@ using namespace std;
 extern void log(string filename, short msgType, string msgText);
 extern void log(short msgType, string msgText);
 extern long long OctetStr2Int64(const OCTET_STRING_t& octetStr);
-extern int LoadReturnBatchToDB(ReturnBatch* returnBatch, long fileID, string rapFilename, long fileStatus);
+extern int LoadReturnBatchToDB(ReturnBatch* returnBatch, long fileID, long roamingHubID, string rapFilename, long fileStatus);
 extern int write_out(const void *buffer, size_t size, void *app_key);
 extern "C" int ncftp_main(int argc, char **argv, char* result);
 
@@ -122,28 +122,28 @@ int RAPFile::EncodeAndUpload(ReturnBatch* returnBatch, string filename, string r
 }
 
 
-int RAPFile::CreateRAPFile(ReturnBatch* returnBatch, ReturnDetail* returnDetail, string tapSender, string tapRecipient, 
+int RAPFile::CreateRAPFile(ReturnBatch* returnBatch, ReturnDetail* returnDetail, long roamingHubID, string tapSender, string tapRecipient, 
 	string tapAvailableStamp, string fileTypeIndicator, long& rapFileID, string& rapSequenceNum)
 {
 	otl_nocommit_stream otlStream;
-	otlStream.open(1, "call BILLING.TAP3.CreateRAPFileByTAPLoader(:pRecipientTAPCode /*char[10],in*/,"
+	otlStream.open(1, "call BILLING.TAP3.CreateRAPFileByTAPLoader(:pRecipientTAPCode /*char[10],in*/, :pRoamingHubID /*long,in*/, "
 		":pTestData /*long,in*/, to_date(:pDate /*char[30],in*/, 'yyyymmddhh24miss'), :pRAPFilename /*char[50],out*/, "
-		":pRAPSequenceNum /*char[10],out*/, :pMobileNetworkID /*long,out*/, :pRoamingHubID /*long,out*/, :pRoamingHubName /*char[100],out*/,"
+		":pRAPSequenceNum /*char[10],out*/, :pMobileNetworkID /*long,out*/, :pRoamingHubName /*char[100],out*/,"
 		":pTimestamp /*char[20],out*/, :pUTCOffset /*char[10],out*/, :pTAPVersion /*long,out*/, :pTAPRelease /*long,out*/, "
 		":pRAPVersion /*long,out*/, :pRAPRelease /*long,out*/, :pTapDecimalPlaces /*long,out*/)"
 		" into :fileid /*long,out*/" , m_otlConnect);
 	otlStream
 		<< tapSender
+		<< roamingHubID
 		<< (long) (fileTypeIndicator.size()>0 ? 1 : 0)
 		<< tapAvailableStamp;
 	
 	string filename, roamingHubName, timeStamp, utcOffset;
-	long  mobileNetworkID, roamingHubID, tapVersion, tapRelease, rapVersion, rapRelease, tapDecimalPlaces;
+	long  mobileNetworkID, tapVersion, tapRelease, rapVersion, rapRelease, tapDecimalPlaces;
 	otlStream
 		>> filename
 		>> rapSequenceNum
 		>> mobileNetworkID
-		>> roamingHubID
 		>> roamingHubName
 		>> timeStamp
 		>> utcOffset
@@ -195,7 +195,7 @@ int RAPFile::CreateRAPFile(ReturnBatch* returnBatch, ReturnDetail* returnDetail,
 	OctetString_fromInt64(returnBatch->rapAuditControlInfo.totalSevereReturnValue, (long long) 0);
 	returnBatch->rapAuditControlInfo.returnDetailsCount = 1; // For Fatal errors 
 
-	int loadResult = LoadReturnBatchToDB(returnBatch, rapFileID, filename, OUTFILE_CREATED_AND_SENT);
+	int loadResult = LoadReturnBatchToDB(returnBatch, rapFileID, roamingHubID, filename, OUTFILE_CREATED_AND_SENT);
 	if (loadResult >= 0)
 		loadResult = EncodeAndUpload(returnBatch, filename, roamingHubName);
 	
@@ -458,7 +458,7 @@ int TAPValidator::CreateBatchControlInfoRAPFile(string logMessage, int errorCode
 	assert(m_transferBatch->batchControlInfo->sender);
 	assert(m_transferBatch->batchControlInfo->recipient);
 	assert(m_transferBatch->batchControlInfo->fileAvailableTimeStamp);
-	int loadRes = rapFile.CreateRAPFile(returnBatch, returnDetail, (char*)m_transferBatch->batchControlInfo->sender->buf,
+	int loadRes = rapFile.CreateRAPFile(returnBatch, returnDetail, m_roamingHubID, (char*)m_transferBatch->batchControlInfo->sender->buf,
 		(char*) m_transferBatch->batchControlInfo->recipient->buf, (char*) m_transferBatch->batchControlInfo->fileAvailableTimeStamp->localTimeStamp->buf,
 		(m_transferBatch->batchControlInfo->fileTypeIndicator ? (char*) m_transferBatch->batchControlInfo->fileTypeIndicator->buf : ""),
 		m_rapFileID, m_rapSequenceNum);
@@ -603,7 +603,7 @@ int TAPValidator::CreateAccountingInfoRAPFile(string logMessage, int errorCode, 
 	assert(m_transferBatch->batchControlInfo->sender);
 	assert(m_transferBatch->batchControlInfo->recipient);
 	assert(m_transferBatch->batchControlInfo->fileAvailableTimeStamp);
-	int loadRes = rapFile.CreateRAPFile(returnBatch, returnDetail, (char*)m_transferBatch->batchControlInfo->sender->buf,
+	int loadRes = rapFile.CreateRAPFile(returnBatch, returnDetail, m_roamingHubID, (char*)m_transferBatch->batchControlInfo->sender->buf,
 		(char*) m_transferBatch->batchControlInfo->recipient->buf, (char*) m_transferBatch->batchControlInfo->fileAvailableTimeStamp->localTimeStamp->buf,
 		(m_transferBatch->batchControlInfo->fileTypeIndicator ? (char*) m_transferBatch->batchControlInfo->fileTypeIndicator->buf : ""),
 		m_rapFileID, m_rapSequenceNum);
@@ -809,7 +809,7 @@ int TAPValidator::CreateNetworkInfoRAPFile(string logMessage, int errorCode, con
 	assert(m_transferBatch->batchControlInfo->sender);
 	assert(m_transferBatch->batchControlInfo->recipient);
 	assert(m_transferBatch->batchControlInfo->fileAvailableTimeStamp);
-	int loadRes = rapFile.CreateRAPFile(returnBatch, returnDetail, (char*)m_transferBatch->batchControlInfo->sender->buf,
+	int loadRes = rapFile.CreateRAPFile(returnBatch, returnDetail, m_roamingHubID, (char*)m_transferBatch->batchControlInfo->sender->buf,
 		(char*) m_transferBatch->batchControlInfo->recipient->buf, (char*) m_transferBatch->batchControlInfo->fileAvailableTimeStamp->localTimeStamp->buf,
 		(m_transferBatch->batchControlInfo->fileTypeIndicator ? (char*) m_transferBatch->batchControlInfo->fileTypeIndicator->buf : ""),
 		m_rapFileID, m_rapSequenceNum);
@@ -945,7 +945,7 @@ int TAPValidator::CreateAuditControlInfoRAPFile(string logMessage, int errorCode
 	assert(m_transferBatch->batchControlInfo->sender);
 	assert(m_transferBatch->batchControlInfo->sender);
 	assert(m_transferBatch->batchControlInfo->fileAvailableTimeStamp);
-	int loadRes = rapFile.CreateRAPFile(returnBatch, returnDetail, (char*)m_transferBatch->batchControlInfo->sender->buf,
+	int loadRes = rapFile.CreateRAPFile(returnBatch, returnDetail, m_roamingHubID, (char*)m_transferBatch->batchControlInfo->sender->buf,
 		(char*) m_transferBatch->batchControlInfo->recipient->buf, (char*) m_transferBatch->batchControlInfo->fileAvailableTimeStamp->localTimeStamp->buf,
 		(m_transferBatch->batchControlInfo->fileTypeIndicator ? (char*) m_transferBatch->batchControlInfo->fileTypeIndicator->buf : ""),
 		m_rapFileID, m_rapSequenceNum);
@@ -1039,7 +1039,7 @@ int TAPValidator::CreateTransferBatchRAPFile(string logMessage, int errorCode)
 	assert(m_transferBatch->batchControlInfo->sender);
 	assert(m_transferBatch->batchControlInfo->recipient);
 	assert(m_transferBatch->batchControlInfo->fileAvailableTimeStamp);
-	int loadRes = rapFile.CreateRAPFile(returnBatch, returnDetail, (char*)m_transferBatch->batchControlInfo->sender->buf,
+	int loadRes = rapFile.CreateRAPFile(returnBatch, returnDetail, m_roamingHubID, (char*)m_transferBatch->batchControlInfo->sender->buf,
 		(char*) m_transferBatch->batchControlInfo->recipient->buf, (char*) m_transferBatch->batchControlInfo->fileAvailableTimeStamp->localTimeStamp->buf,
 		(m_transferBatch->batchControlInfo->fileTypeIndicator ? (char*) m_transferBatch->batchControlInfo->fileTypeIndicator->buf : ""),
 		m_rapFileID, m_rapSequenceNum);
@@ -1134,7 +1134,7 @@ int TAPValidator::CreateNotificationRAPFile(string logMessage, int errorCode, co
 	assert(m_notification->sender);
 	assert(m_notification->recipient);
 	assert(m_notification->fileAvailableTimeStamp);
-	int loadRes = rapFile.CreateRAPFile(returnBatch, returnDetail, (char*)m_notification->sender->buf,
+	int loadRes = rapFile.CreateRAPFile(returnBatch, returnDetail, m_roamingHubID, (char*)m_notification->sender->buf,
 		(char*) m_notification->recipient->buf, (char*) m_notification->fileAvailableTimeStamp->localTimeStamp->buf,
 		(m_notification->fileTypeIndicator ? (char*) m_notification->fileTypeIndicator->buf : ""),
 		m_rapFileID, m_rapSequenceNum);
@@ -1182,8 +1182,9 @@ TAPValidationResult TAPValidator::ValidateNotification()
 }
 
 
-TAPValidationResult TAPValidator::Validate(DataInterChange* dataInterchange)
+TAPValidationResult TAPValidator::Validate(DataInterChange* dataInterchange, long roamingHubID)
 {
+	m_roamingHubID = roamingHubID;
 	switch (dataInterchange->present) {
 		case DataInterChange_PR_transferBatch:
 			m_transferBatch = &dataInterchange->choice.transferBatch;

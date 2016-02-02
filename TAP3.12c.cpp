@@ -50,7 +50,7 @@ void logToFile(string message)
 void log(string filename, short msgType, string msgText)
 {
 	otl_stream otlLog;
-
+	
 	if (otlLogConnect.connected) {
 		if (msgText.length() > 2048)
 			msgText = msgText.substr(0, 2048);
@@ -941,7 +941,8 @@ void Finalize(bool bSuccess = false)
 	if (buffer ) delete [] buffer;
 }
 //------------------------------
-int LoadTAPFileToDB( unsigned char* buffer, long dataLen, long fileID, bool bPrintOnly ) 
+
+int LoadTAPFileToDB( unsigned char* buffer, long dataLen, long fileID, long roamingHubID, bool bPrintOnly ) 
 {
 	int index=0;
 	try {
@@ -974,20 +975,20 @@ int LoadTAPFileToDB( unsigned char* buffer, long dataLen, long fileID, bool bPri
 
 		otl_nocommit_stream otlStream;
 		TAPValidator tapValidator(otlConnect, config);
-		TAPValidationResult validationRes = tapValidator.Validate(dataInterchange);
+		TAPValidationResult validationRes = tapValidator.Validate(dataInterchange, roamingHubID);
 		if (validationRes == VALIDATION_IMPOSSIBLE) {
 			log(LOG_ERROR, "Unable to validate TAP file. File is not loaded.");
 			return TL_TAP_NOT_VALIDATED;
 		}
-
+		
 		if (dataInterchange->present == DataInterChange_PR_notification) {
 			// Processing Notification (empty TAP file, i.e. with no call records)
 			otlStream.open( 1 /*stream buffer size in logical rows*/, 
-				"insert into BILLING.TAP3_FILE (FILE_ID, FILENAME, SENDER, RECIPIENT, SEQUENCE_NUMBER , CREATION_STAMP, CREATION_UTCOFF,"
+				"insert into BILLING.TAP3_FILE (FILE_ID, ROAMINGHUB_ID, FILENAME, SENDER, RECIPIENT, SEQUENCE_NUMBER , CREATION_STAMP, CREATION_UTCOFF,"
 				"CUTOFF_STAMP, CUTOFF_UTCOFF, AVAILABLE_STAMP, AVAILABLE_UTCOFF, LOAD_TIME, NOTIFICATION, TAP_VERSION, TAP_RELEASE, "
 				"FILE_TYPE_INDICATOR, STATUS, CANCEL_RAP_FILE_SEQNUM, CANCEL_RAP_FILE_ID) "
 				"values ("
-				":hfileid /*long,in*/, :filename/*char[255],in*/, :sender/*char[20],in*/, :recipient/*char[20],in*/, :seq_num/*char[10],in*/,"
+				":hfileid /*long,in*/, :roamhubid /*long,in*/, :filename/*char[255],in*/, :sender/*char[20],in*/, :recipient/*char[20],in*/, :seq_num/*char[10],in*/,"
 				"to_date(:creation_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :creation_utcoff /* char[10],in*/,"
 				"to_date(:cutoff_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :cutoff_utcoff /* char[10],in*/,"
 				"to_date(:available_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :available_utcoff /* char[10],in*/,"
@@ -996,6 +997,7 @@ int LoadTAPFileToDB( unsigned char* buffer, long dataLen, long fileID, bool bPri
 				":cancel_rap_file_seqnum /*char[10],in*/, :cancel_rap_file_id /*long,in*/)", otlConnect); 
 			otlStream
 				<< fileID
+				<< roamingHubID
 				<< pShortName 
 				<< (char*) dataInterchange->choice.notification.sender->buf 
 				<< (char*) dataInterchange->choice.notification.recipient->buf 
@@ -1028,12 +1030,12 @@ int LoadTAPFileToDB( unsigned char* buffer, long dataLen, long fileID, bool bPri
 
 		// Processing Transfer Batch
 		otlStream.open( 1 /*stream buffer size in logical rows*/, 
-			"insert into BILLING.TAP3_FILE (FILE_ID, FILENAME, SENDER, RECIPIENT, SEQUENCE_NUMBER , CREATION_STAMP, CREATION_UTCOFF,\
+			"insert into BILLING.TAP3_FILE (FILE_ID, ROAMINGHUB_ID, FILENAME, SENDER, RECIPIENT, SEQUENCE_NUMBER , CREATION_STAMP, CREATION_UTCOFF,\
 			CUTOFF_STAMP, CUTOFF_UTCOFF, AVAILABLE_STAMP, AVAILABLE_UTCOFF, LOCAL_CURRENCY, LOAD_TIME, EARLIEST_TIME, EARLIEST_UTCOFF, \
 			LATEST_TIME, LATEST_UTCOFF, EVENT_COUNT, TOTAL_CHARGE, TOTAL_TAX, TOTAL_DISCOUNT, NOTIFICATION, STATUS, TAP_VERSION, TAP_RELEASE, "
 			"FILE_TYPE_INDICATOR, TAP_DECIMAL_PLACES, CANCEL_RAP_FILE_SEQNUM, CANCEL_RAP_FILE_ID) \
 			values (\
-			  :hfileid /*long,in*/, :filename/*char[255],in*/, :sender/*char[20],in*/, :recipient/*char[20],in*/, :seq_num/*char[10],in*/,\
+			  :hfileid /*long,in*/, :roamhubid /*long,in*/, :filename/*char[255],in*/, :sender/*char[20],in*/, :recipient/*char[20],in*/, :seq_num/*char[10],in*/,\
 			  to_date(:creation_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :creation_utcoff /* char[10],in */,\
 			  to_date(:cutoff_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :cutoff_utcoff /* char[10],in */,\
 			  to_date(:available_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :available_utcoff /* char[10],in */,\
@@ -1041,9 +1043,10 @@ int LoadTAPFileToDB( unsigned char* buffer, long dataLen, long fileID, bool bPri
 			  to_date(:latest /*char[20],in*/, 'yyyymmddhh24miss'), :latest_utcoff /* char[10],in */, :eventcount /* long,in */, :totalchr /* double,in */, \
 			  :total_tax /*double,in*/, :total_discount /*double,in*/, 0 /*notification*/, :status /*long,in*/, :tapVer /*long,in*/, :specif /*long,in*/, "
 			  ":filetype /*char[5],in*/, :tapDecimalPlaces /*long,in*/, :cancel_rap_file_seqnum /*char[10],in*/, :cancel_rap_file_id /*long,in*/) ", otlConnect);
-		otlStream
+		otlStream 
 			<< fileID
-			<< pShortName
+			<< roamingHubID
+			<< pShortName 
 			<< ( dataInterchange->choice.transferBatch.batchControlInfo->sender ?
 				 (char*) dataInterchange->choice.transferBatch.batchControlInfo->sender->buf : "" )
 			<< ( dataInterchange->choice.transferBatch.batchControlInfo->recipient ?
@@ -1122,7 +1125,7 @@ int LoadTAPFileToDB( unsigned char* buffer, long dataLen, long fileID, bool bPri
 
 		otlStream.flush();
 		otlStream.close();
-
+		
 		if (validationRes == FATAL_ERROR)
 			// Finish processing here. No call records are uploaded for Fatal Error TAP files
 			return TL_OK;
@@ -1461,19 +1464,19 @@ int LoadRAPSevereReturn(long fileID, const SevereReturn& severeReturn)
 
 //-----------------------------------------------------
 
-int LoadReturnBatchToDB(ReturnBatch* returnBatch, long fileID, string rapFilename, long fileStatus)
-{
-	// set TAP power value used to convert integer values from file to double values for DB
-	if( returnBatch->rapBatchControlInfoRap.tapDecimalPlaces )
+int LoadReturnBatchToDB(ReturnBatch* returnBatch, long fileID, long roamingHubID, string rapFilename, long fileStatus)
+			{
+		// set TAP power value used to convert integer values from file to double values for DB
+		if( returnBatch->rapBatchControlInfoRap.tapDecimalPlaces )
 		dblTAPPower = pow( (double) 10, *returnBatch->rapBatchControlInfoRap.tapDecimalPlaces );
-	else
+		else
 		dblTAPPower = 1;
 
-	otl_nocommit_stream otlStream;
+		otl_nocommit_stream otlStream;
 	try {	
-	// REGISTER RAP FILE IN DB 
-	otlStream.open( 1 /*stream buffer size in logical rows*/, 
-		"insert into BILLING.RAP_FILE (FILE_ID, FILENAME, SENDER, RECIPIENT, ROAMING_PARTNER, SEQUENCE_NUMBER , CREATION_STAMP, CREATION_UTCOFF,"
+		// REGISTER RAP FILE IN DB 
+		otlStream.open( 1 /*stream buffer size in logical rows*/, 
+		"insert into BILLING.RAP_FILE (FILE_ID, ROAMINGHUB_ID, FILENAME, SENDER, RECIPIENT, ROAMING_PARTNER, SEQUENCE_NUMBER , CREATION_STAMP, CREATION_UTCOFF,"
 		"AVAILABLE_STAMP, AVAILABLE_UTCOFF, TAP_CURRENCY, LOAD_TIME, "
 		"RETURN_DETAILS_COUNT, TOTAL_SEVERE_RETURN, TOTAL_SEVERE_RETURN_TAX, STATUS, RAP_VERSION, RAP_RELEASE, FILE_TYPE_INDICATOR, "
 		"TAP_DECIMAL_PLACES, TAP_VERSION, TAP_RELEASE) "
@@ -1485,78 +1488,79 @@ int LoadReturnBatchToDB(ReturnBatch* returnBatch, long fileID, string rapFilenam
 		":rapVer /*long,in*/, :rapSpecif /*long,in*/, :filetype /*char[5],in*/, :tapDecimalPlaces /*long,in*/, "
 		":tapVersion /*long,in*/, :tapSpecif /*long,in*/ ) ", otlConnect);
 
-	otlStream 
-		<< fileID
-		<< rapFilename 
-		<< returnBatch->rapBatchControlInfoRap.sender.buf
-		<< returnBatch->rapBatchControlInfoRap.recipient.buf
-		<< (returnBatch->rapBatchControlInfoRap.roamingPartner ? (const char*) returnBatch->rapBatchControlInfoRap.roamingPartner->buf : "" )
-		<< returnBatch->rapBatchControlInfoRap.rapFileSequenceNumber.buf
-		<< (const char*) returnBatch->rapBatchControlInfoRap.rapFileCreationTimeStamp.localTimeStamp->buf
-		<< (const char*) returnBatch->rapBatchControlInfoRap.rapFileCreationTimeStamp.utcTimeOffset->buf
-		<< (const char*) returnBatch->rapBatchControlInfoRap.rapFileAvailableTimeStamp.localTimeStamp->buf
-		<< (const char*) returnBatch->rapBatchControlInfoRap.rapFileAvailableTimeStamp.utcTimeOffset->buf
-		<< ( returnBatch->rapBatchControlInfoRap.tapCurrency ? (const char*) returnBatch->rapBatchControlInfoRap.tapCurrency->buf : "" )
-		<< returnBatch->rapAuditControlInfo.returnDetailsCount
-		<< OctetStr2Int64(returnBatch->rapAuditControlInfo.totalSevereReturnValue) / dblTAPPower;
+		otlStream 
+			<< fileID
+			<< roamingHubID
+			<< rapFilename 
+			<< returnBatch->rapBatchControlInfoRap.sender.buf
+			<< returnBatch->rapBatchControlInfoRap.recipient.buf
+			<< (returnBatch->rapBatchControlInfoRap.roamingPartner ? (const char*) returnBatch->rapBatchControlInfoRap.roamingPartner->buf : "" )
+			<< returnBatch->rapBatchControlInfoRap.rapFileSequenceNumber.buf
+			<< (const char*) returnBatch->rapBatchControlInfoRap.rapFileCreationTimeStamp.localTimeStamp->buf
+			<< (const char*) returnBatch->rapBatchControlInfoRap.rapFileCreationTimeStamp.utcTimeOffset->buf
+			<< (const char*) returnBatch->rapBatchControlInfoRap.rapFileAvailableTimeStamp.localTimeStamp->buf
+			<< (const char*) returnBatch->rapBatchControlInfoRap.rapFileAvailableTimeStamp.utcTimeOffset->buf
+			<< ( returnBatch->rapBatchControlInfoRap.tapCurrency ? (const char*) returnBatch->rapBatchControlInfoRap.tapCurrency->buf : "" )
+			<< returnBatch->rapAuditControlInfo.returnDetailsCount
+			<< OctetStr2Int64(returnBatch->rapAuditControlInfo.totalSevereReturnValue) / dblTAPPower;
 
-	if( returnBatch->rapAuditControlInfo.totalSevereReturnTax )
-		otlStream << OctetStr2Int64(*returnBatch->rapAuditControlInfo.totalSevereReturnTax) / dblTAPPower;
-	else
-		otlStream << otl_null();
+		if( returnBatch->rapAuditControlInfo.totalSevereReturnTax )
+			otlStream << OctetStr2Int64(*returnBatch->rapAuditControlInfo.totalSevereReturnTax) / dblTAPPower;
+		else
+			otlStream << otl_null();
 
-	otlStream
+		otlStream
 		<< fileStatus
-		<< returnBatch->rapBatchControlInfoRap.rapSpecificationVersionNumber
-		<< returnBatch->rapBatchControlInfoRap.rapReleaseVersionNumber
-		<< (returnBatch->rapBatchControlInfoRap.fileTypeIndicator ? (const char*) returnBatch->rapBatchControlInfoRap.fileTypeIndicator->buf : "" );
+			<< returnBatch->rapBatchControlInfoRap.rapSpecificationVersionNumber
+			<< returnBatch->rapBatchControlInfoRap.rapReleaseVersionNumber
+			<< (returnBatch->rapBatchControlInfoRap.fileTypeIndicator ? (const char*) returnBatch->rapBatchControlInfoRap.fileTypeIndicator->buf : "" );
 
-	if( returnBatch->rapBatchControlInfoRap.tapDecimalPlaces  )
-		otlStream << *returnBatch->rapBatchControlInfoRap.tapDecimalPlaces;
-	else
-		otlStream << otl_null();
+		if( returnBatch->rapBatchControlInfoRap.tapDecimalPlaces  )
+			otlStream << *returnBatch->rapBatchControlInfoRap.tapDecimalPlaces;
+		else
+			otlStream << otl_null();
 
-	if( returnBatch->rapBatchControlInfoRap.specificationVersionNumber  )
-		otlStream << *returnBatch->rapBatchControlInfoRap.specificationVersionNumber;
-	else
-		otlStream << otl_null();
+		if( returnBatch->rapBatchControlInfoRap.specificationVersionNumber  )
+			otlStream << *returnBatch->rapBatchControlInfoRap.specificationVersionNumber;
+		else
+			otlStream << otl_null();
 
-	if( returnBatch->rapBatchControlInfoRap.releaseVersionNumber )
-		otlStream << *returnBatch->rapBatchControlInfoRap.releaseVersionNumber;
-	else
-		otlStream << otl_null();
+		if( returnBatch->rapBatchControlInfoRap.releaseVersionNumber )
+			otlStream << *returnBatch->rapBatchControlInfoRap.releaseVersionNumber;
+		else
+			otlStream << otl_null();
 
-	otlStream.flush();
-	otlStream.close();
+		otlStream.flush();
+		otlStream.close();
 
-	int loadResult = -1;
-	for (int i = 0; i < returnBatch->returnDetails.list.count; i++) {
-		switch (returnBatch->returnDetails.list.array[i]->present) {
-		case ReturnDetail_PR_stopReturn:
-			loadResult = LoadRAPStopOrMissingInfo(fileID, (char*)returnBatch->returnDetails.list.array[i]->choice.stopReturn.lastSeqNumber.buf, "", "",
-				returnBatch->returnDetails.list.array[i]->choice.stopReturn.operatorSpecList);
-			break;
-		case ReturnDetail_PR_missingReturn:
-			loadResult = LoadRAPStopOrMissingInfo(fileID, "",
-				(char*) returnBatch->returnDetails.list.array[i]->choice.missingReturn.startMissingSeqNumber.buf, 
-				returnBatch->returnDetails.list.array[i]->choice.missingReturn.endMissingSeqNumber ?
-					(char*) returnBatch->returnDetails.list.array[i]->choice.missingReturn.endMissingSeqNumber->buf : "",
-				returnBatch->returnDetails.list.array[i]->choice.stopReturn.operatorSpecList);
-			break;
-		case ReturnDetail_PR_fatalReturn:
-			loadResult = LoadRAPFatalReturn(fileID, returnBatch->returnDetails.list.array[i]->choice.fatalReturn);
-			break;
-		case ReturnDetail_PR_severeReturn:
-			loadResult = LoadRAPSevereReturn(fileID, returnBatch->returnDetails.list.array[i]->choice.severeReturn);
-			break;
-		default:
-			log(LOG_ERROR, "Unknown return detail structure: " + to_string(static_cast<unsigned long long> (returnBatch->returnDetails.list.array[i]->present)));
-			return TL_DECODEERROR;
+		int loadResult = -1;
+		for (int i = 0; i < returnBatch->returnDetails.list.count; i++) {
+			switch (returnBatch->returnDetails.list.array[i]->present) {
+			case ReturnDetail_PR_stopReturn:
+				loadResult = LoadRAPStopOrMissingInfo(fileID, (char*)returnBatch->returnDetails.list.array[i]->choice.stopReturn.lastSeqNumber.buf, "", "",
+					returnBatch->returnDetails.list.array[i]->choice.stopReturn.operatorSpecList);
+				break;
+			case ReturnDetail_PR_missingReturn:
+				loadResult = LoadRAPStopOrMissingInfo(fileID, "",
+					(char*) returnBatch->returnDetails.list.array[i]->choice.missingReturn.startMissingSeqNumber.buf, 
+					returnBatch->returnDetails.list.array[i]->choice.missingReturn.endMissingSeqNumber ?
+						(char*) returnBatch->returnDetails.list.array[i]->choice.missingReturn.endMissingSeqNumber->buf : "",
+					returnBatch->returnDetails.list.array[i]->choice.stopReturn.operatorSpecList);
+				break;
+			case ReturnDetail_PR_fatalReturn:
+				loadResult = LoadRAPFatalReturn(fileID, returnBatch->returnDetails.list.array[i]->choice.fatalReturn);
+				break;
+			case ReturnDetail_PR_severeReturn:
+				loadResult = LoadRAPSevereReturn(fileID, returnBatch->returnDetails.list.array[i]->choice.severeReturn);
+				break;
+			default:
+				log(LOG_ERROR, "Unknown return detail structure: " + to_string(static_cast<unsigned long long> (returnBatch->returnDetails.list.array[i]->present)));
+				return TL_DECODEERROR;
+			}
+
+			if (loadResult != TL_OK)
+				return loadResult;
 		}
-
-		if (loadResult != TL_OK)
-			return loadResult;
-	}
 	}
 	catch (otl_exception &otlEx) {
 		otlConnect.rollback();
@@ -1573,7 +1577,7 @@ int LoadReturnBatchToDB(ReturnBatch* returnBatch, long fileID, string rapFilenam
 
 //--------------------------------------------------
 
-int LoadRAPFileToDB( unsigned char* buffer, long dataLen, long fileID, bool bPrintOnly ) 
+int LoadRAPFileToDB( unsigned char* buffer, long dataLen, long fileID, long roamingHubID, bool bPrintOnly ) 
 {
 	int index=0;
 	try {
@@ -1603,8 +1607,8 @@ int LoadRAPFileToDB( unsigned char* buffer, long dataLen, long fileID, bool bPri
 			printf("---- File contents printed to output file. Exiting. -------");
 			return TL_OK;
 		}
-
-		return LoadReturnBatchToDB(returnBatch, fileID, pShortName, INFILE_STATUS_NEW);
+	
+		return LoadReturnBatchToDB(returnBatch, fileID, roamingHubID, pShortName, INFILE_STATUS_NEW);
 	}
 	catch(char* pMess)
 	{
@@ -1616,7 +1620,7 @@ int LoadRAPFileToDB( unsigned char* buffer, long dataLen, long fileID, bool bPri
 
 //------------------------------
 
-int LoadRAPAckToDB(unsigned char* buffer, long dataLen, long fileID, bool bPrintOnly)
+int LoadRAPAckToDB(unsigned char* buffer, long dataLen, long fileID, long roamingHubID, bool bPrintOnly)
 {
 	asn_dec_rval_t rval;
 
@@ -1687,7 +1691,7 @@ int LoadRAPAckToDB(unsigned char* buffer, long dataLen, long fileID, bool bPrint
 
 int main(int argc, const char* argv[])
 {
-	if( argc < 3 )
+	if( argc < 4 )
 		return TL_PARAM_ERROR;
 
 	// установим pShortName на имя файла, отбросив путь
@@ -1708,6 +1712,12 @@ int main(int argc, const char* argv[])
 		return TL_FILEERROR ;
 	}
 
+	long roamingHubID = strtol(argv[3], NULL, 10);
+	if( roamingHubID == 0 ) {
+		log( LOG_ERROR, string("Wrong value of roamingHubID given in 3nd parameter: ") + argv[3] );
+		return TL_FILEERROR ;
+	}
+
 	// установим тип файла
 	FileType fileType;
 	if( !strnicmp(pShortName, "CD", 2) || !strnicmp(pShortName, "TD", 2))
@@ -1722,10 +1732,8 @@ int main(int argc, const char* argv[])
 		return TL_FILEERROR;
 	}
 	
-
 	int index=0;
 	try {
-
 		// чтение файла конфигурации
 		/*string line;
 		string option_name;
@@ -1818,16 +1826,15 @@ int main(int argc, const char* argv[])
 			return TL_FILEERROR;
 		}
 		
-
 		bool bPrintOnly = false;
-		if(argc>3) {
-			if(!strcmp(argv[3], "-p") || !strcmp(argv[3], "-P")) {
+		if(argc>4) {
+			if(!strcmp(argv[4], "-p") || !strcmp(argv[4], "-P")) {
 				// key to print contents of file. No upload to DB is needed.
 				bPrintOnly = true;
 			}
 
-			if(!strcmp(argv[3], "-d") || !strcmp(argv[3], "-D")) {
-				debugMode = 1;
+			if(!strcmp(argv[4], "-d") || !strcmp(argv[4], "-D")) {
+				// debugMode = 1;
 			}
 		}
 
@@ -1849,12 +1856,11 @@ int main(int argc, const char* argv[])
 			return TL_CONNECTERROR; 
 		}
 	
-		
 		int res;
 		switch( fileType ) {
 		case ftTAP:
 			log(LOG_INFO, "--------- Loading TAP3 file (ID " + to_string((long long) fileID)+") started ---------");
-			res = LoadTAPFileToDB( buffer, tapFileLen, fileID, bPrintOnly ) ; 
+			res = LoadTAPFileToDB( buffer, tapFileLen, fileID, roamingHubID, bPrintOnly ) ; 
 			if (res == TL_OK)
 				log(LOG_INFO, "--------- Loading TAP3 file (ID " + to_string((long long)fileID) + ") finished successfully ---------");
 			else
@@ -1863,7 +1869,7 @@ int main(int argc, const char* argv[])
 			return res;
 		case ftRAP:
 			log(LOG_INFO, "--------- Loading RAP file (ID " + to_string((long long) fileID) + ") started ---------");
-			res = LoadRAPFileToDB( buffer, tapFileLen, fileID, bPrintOnly ) ; 
+			res = LoadRAPFileToDB( buffer, tapFileLen, fileID, roamingHubID, bPrintOnly ) ; 
 			if (res == TL_OK)
 				log(LOG_INFO, "--------- Loading RAP file (ID " + to_string((long long)fileID) + ") finished successfully ---------");
 			else
@@ -1872,7 +1878,7 @@ int main(int argc, const char* argv[])
 			return res;
 		case ftRAPAcknowledgement:
 			log(LOG_INFO, "--------- Loading RAP Acknowledgement file (ID " + to_string((long long) fileID) + ") started ---------");
-			res = LoadRAPAckToDB(buffer, tapFileLen, fileID, bPrintOnly);
+			res = LoadRAPAckToDB(buffer, tapFileLen, fileID, roamingHubID, bPrintOnly);
 			if (res == TL_OK)
 				log(LOG_INFO, "--------- Loading RAP Acknowledgement file (ID " + to_string((long long)fileID) + ") finished successfully ---------");
 			else
@@ -1915,9 +1921,10 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 //---------------------------------
 // Function exported by DLL
 //---------------------------------
-__declspec (dllexport) int __stdcall LoadFileToDB(char* pFilename, long fileID)
+__declspec (dllexport) int __stdcall LoadFileToDB(char* pFilename, long fileID, long roamingHubID)
 {
-	const char* pArgv[] = { "TAP3Loader.exe", pFilename, to_string(static_cast<unsigned long long> (fileID)).c_str() };
+	const char* pArgv[] = { "TAP3Loader.exe", pFilename, to_string(static_cast<unsigned long long> (fileID)).c_str(), 
+		to_string(static_cast<unsigned long long> (roamingHubID)).c_str() };
 
-	return main(3, pArgv);
+	return main(4, pArgv);
 }
