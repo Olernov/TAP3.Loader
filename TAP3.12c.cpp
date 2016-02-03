@@ -29,6 +29,8 @@ otl_connect otlConnect;
 otl_connect otlLogConnect;
 ofstream ofsLog;
 
+const short mainArgsCount = 5;
+
 enum FileType {
 	ftTAP = 0,
 	ftRAP = 1,
@@ -1691,7 +1693,8 @@ int LoadRAPAckToDB(unsigned char* buffer, long dataLen, long fileID, long roamin
 
 int main(int argc, const char* argv[])
 {
-	if( argc < 4 )
+	if( argc < mainArgsCount-1 )
+		// last param (config file name) is optional, so don't raise an error
 		return TL_PARAM_ERROR;
 
 	// установим pShortName на имя файла, отбросив путь
@@ -1731,7 +1734,7 @@ int main(int argc, const char* argv[])
 		Finalize();
 		return TL_FILEERROR;
 	}
-	
+
 	int index=0;
 	try {
 		// чтение файла конфигурации
@@ -1743,10 +1746,11 @@ int main(int argc, const char* argv[])
 		string ftpUsername;
 		string ftpPassword;
 		string ftpDirectory;
+		const char* configFilename = argv[4] ? argv[4] : "TAP3Loader.cfg";
 
-		ifstream ifsSettings ("TAP3Loader.cfg", ifstream::in);
+		ifstream ifsSettings (configFilename, ifstream::in);
 		if (!ifsSettings.is_open())	{
-			fprintf( stderr, "Unable to open config file TAP3Loader.cfg");
+			log( LOG_ERROR, string("Unable to open config file ") + configFilename);
 			if( buffer ) delete [] buffer;
 			return TL_PARAM_ERROR;
 		}
@@ -1784,9 +1788,10 @@ int main(int argc, const char* argv[])
 		}
 		ifsSettings.close();*/
 
-		ifstream ifsSettings("TAP3Loader.cfg", ifstream::in);
+		const char* configFilename = argv[4] ? argv[4] : "TAP3Loader.cfg";
+		ifstream ifsSettings(configFilename, ifstream::in);
 		if (!ifsSettings.is_open())	{
-			fprintf( stderr, "Unable to open config file TAP3Loader.cfg");
+			log( LOG_ERROR, string("Unable to open config file ") + configFilename);
 			if( buffer ) delete [] buffer;
 			return TL_PARAM_ERROR;
 		}
@@ -1794,16 +1799,10 @@ int main(int argc, const char* argv[])
 		ifsSettings.close();
 
 		if (config.GetConnectString().empty()) {
-			log(LOG_ERROR, "Connect string to DB is not found in TAP3Loader.cfg file. Exiting.");
+			log(LOG_ERROR, string("Connect string to DB is not found in ") + configFilename + ". Exiting.");
 			ofsLog.close();
 			exit(TL_FILEERROR);
 		}
-
-		/*if(connectString.length() == 0) {
-			log( LOG_ERROR, "Connect string to DB is not found in ini-file. Exiting.");
-			ofsLog.close();
-			return TL_FILEERROR;
-		}*/
 
 		FILE *fTapFile=fopen(argv[1],"rb");
 		if(!fTapFile) {
@@ -1825,15 +1824,15 @@ int main(int argc, const char* argv[])
 			delete [] buffer;
 			return TL_FILEERROR;
 		}
-		
+
 		bool bPrintOnly = false;
-		if(argc>4) {
-			if(!strcmp(argv[4], "-p") || !strcmp(argv[4], "-P")) {
+		if(argc > mainArgsCount) {
+			if(!strcmp(argv[mainArgsCount], "-p") || !strcmp(argv[mainArgsCount], "-P")) {
 				// key to print contents of file. No upload to DB is needed.
 				bPrintOnly = true;
 			}
 
-			if(!strcmp(argv[4], "-d") || !strcmp(argv[4], "-D")) {
+			if(!strcmp(argv[mainArgsCount], "-d") || !strcmp(argv[mainArgsCount], "-D")) {
 				// debugMode = 1;
 			}
 		}
@@ -1855,7 +1854,7 @@ int main(int argc, const char* argv[])
 			if(ofsLog.is_open()) ofsLog.close();
 			return TL_CONNECTERROR; 
 		}
-	
+		
 		int res;
 		switch( fileType ) {
 		case ftTAP:
@@ -1921,10 +1920,10 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 //---------------------------------
 // Function exported by DLL
 //---------------------------------
-__declspec (dllexport) int __stdcall LoadFileToDB(char* pFilename, long fileID, long roamingHubID)
+__declspec (dllexport) int __stdcall LoadFileToDB(char* pFilename, long fileID, long roamingHubID, char* pConfigFilename)
 {
 	const char* pArgv[] = { "TAP3Loader.exe", pFilename, to_string(static_cast<unsigned long long> (fileID)).c_str(), 
-		to_string(static_cast<unsigned long long> (roamingHubID)).c_str() };
+		to_string(static_cast<unsigned long long> (roamingHubID)).c_str(), pConfigFilename };
 
-	return main(4, pArgv);
+	return main(mainArgsCount, pArgv);
 }
