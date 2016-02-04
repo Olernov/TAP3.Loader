@@ -1763,7 +1763,7 @@ int main(int argc, const char* argv[])
 		string ftpUsername;
 		string ftpPassword;
 		string ftpDirectory;
-		const char* configFilename = argv[4] ? argv[4] : "TAP3Loader.cfg";
+		const char* configFilename = strlen(argv[4]) > 0 ? argv[4] : "TAP3Loader.cfg";
 
 		ifstream ifsSettings (configFilename, ifstream::in);
 		if (!ifsSettings.is_open())	{
@@ -1929,8 +1929,9 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 //---------------------------------
 __declspec (dllexport) int __stdcall LoadFileToDB(char* pFilename, long fileID, long roamingHubID, char* pConfigFilename)
 {
-	const char* pArgv[] = { "TAP3Loader.exe", pFilename, to_string(static_cast<unsigned long long> (fileID)).c_str(), 
-		to_string(static_cast<unsigned long long> (roamingHubID)).c_str(), pConfigFilename };
-
+	string strFileID = to_string ((unsigned long long) fileID);
+	string strRoamHubID = to_string((unsigned long long) roamingHubID);
+	const char* pArgv[] = { "TAP3Loader.exe", pFilename, strFileID.c_str(), strRoamHubID.c_str(), pConfigFilename };
+	
 	return main(mainArgsCount, pArgv);
 }
