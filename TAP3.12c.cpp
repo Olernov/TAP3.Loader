@@ -1738,57 +1738,7 @@ int main(int argc, const char* argv[])
 	int index=0;
 	try {
 		// чтение файла конфигурации
-		/*string line;
-		string option_name;
-		string option_value;
-		string connectString;
-		string ftpServer;
-		string ftpUsername;
-		string ftpPassword;
-		string ftpDirectory;
-		const char* configFilename = argv[4] ? argv[4] : "TAP3Loader.cfg";
-
-		ifstream ifsSettings (configFilename, ifstream::in);
-		if (!ifsSettings.is_open())	{
-			log( LOG_ERROR, string("Unable to open config file ") + configFilename);
-			if( buffer ) delete [] buffer;
-			return TL_PARAM_ERROR;
-		}
-		while ( getline (ifsSettings, line) )
-		{
-			size_t pos = line.find_first_not_of(" \t\r\n");
-			if( pos != string::npos )
-				if(line[pos] == '#' || line[pos] == '\0')
-					continue;
-			size_t delim_pos = line.find_first_of(" \t=", pos);
-			if (delim_pos != string::npos) {
-				string option_name = line.substr(pos, delim_pos-pos);
-				transform(option_name.begin(), option_name.end(), option_name.begin(), ::toupper);
-
-				size_t value_pos = line.find_first_not_of(" \t=", delim_pos);
-				string option_value;
-				if (value_pos != string::npos) {
-					option_value = line.substr(value_pos);
-					size_t comment_pos = option_value.find_first_of(" \t#");
-					if (comment_pos != string::npos)
-						option_value = option_value.substr(0, comment_pos);
-				}
-
-				if( option_name.compare( "CONNECT_STRING" ) == 0 )
-					connectString = option_value;
-				if( option_name.compare( "FTP_SERVER" ) == 0  )
-					ftpServer = option_value;
-				if( option_name.compare( "FTP_USERNAME" ) == 0  )
-					ftpUsername = option_value;
-				if( option_name.compare( "FTP_PASSWORD" ) == 0  )
-					ftpPassword = option_value;
-				if( option_name.compare( "FTP_DIRECTORY" ) == 0  )
-					ftpDirectory = option_value;
-			}
-		}
-		ifsSettings.close();*/
-
-		const char* configFilename = argv[4] ? argv[4] : "TAP3Loader.cfg";
+		const char* configFilename = strlen(argv[4]) > 0 ? argv[4] : "TAP3Loader.cfg";
 		ifstream ifsSettings(configFilename, ifstream::in);
 		if (!ifsSettings.is_open())	{
 			log( LOG_ERROR, string("Unable to open config file ") + configFilename);
@@ -1922,8 +1872,18 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 //---------------------------------
 __declspec (dllexport) int __stdcall LoadFileToDB(char* pFilename, long fileID, long roamingHubID, char* pConfigFilename)
 {
-	const char* pArgv[] = { "TAP3Loader.exe", pFilename, to_string(static_cast<unsigned long long> (fileID)).c_str(), 
-		to_string(static_cast<unsigned long long> (roamingHubID)).c_str(), pConfigFilename };
+	/*ofstream params("params.txt");
+	if(params.is_open()) {
+		params << "filename: " << pFilename << endl;
+		params << "fileID: " << fileID << endl;
+		params << "roamingHubID: " << roamingHubID << endl;
+		params << "pConfigFilename: " << pConfigFilename << endl;
+	}
+	params.close();*/
+
+	string strFileID = to_string ((unsigned long long) fileID);
+	string strRoamHubID = to_string((unsigned long long) roamingHubID);
+	const char* pArgv[] = { "TAP3Loader.exe", pFilename, strFileID.c_str(), strRoamHubID.c_str(), pConfigFilename };
 
 	return main(mainArgsCount, pArgv);
 }

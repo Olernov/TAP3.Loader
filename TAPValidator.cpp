@@ -215,7 +215,8 @@ bool TAPValidator::IsRecipientCorrect(string recipient)
 {
 	otl_nocommit_stream otlStream;
 	string ourTAPCode;
-	otlStream.open(1, "call BILLING.TAP3.GetOurTAPCode() into :ourTapCode /*char[20],out*/" , m_otlConnect);
+	otlStream.open(1, "call BILLING.TAP3.GetOurTAPCode(:roamhubid /*long,in*/) into :ourTapCode /*char[20],out*/" , m_otlConnect);
+	otlStream << m_roamingHubID;
 	otlStream
 		>> ourTAPCode;
 	otlStream.close();
@@ -227,13 +228,14 @@ bool TAPValidator::FileIsDuplicated()
 {
 	otl_nocommit_stream otlStream;
 	otlStream.open(1, "call BILLING.TAP3.IsTAPFileDuplicated("
-		":sender /*char[20],in*/, :recipient /*char[20],in*/, :file_seqnum /*char[20],in*/, "
+		":sender /*char[20],in*/, :recipient /*char[20],in*/, :roam_hub_id /*long,in*/, :file_seqnum /*char[20],in*/, "
 		":file_type_indic /*char[20],in*/, :rap_file_seqnum /*char[20],in*/) "
 		"into :res /*long,out*/", m_otlConnect);
 	if (m_transferBatch) {
 		otlStream
 			<< m_transferBatch->batchControlInfo->sender->buf
 			<< m_transferBatch->batchControlInfo->recipient->buf
+			<< m_roamingHubID
 			<< m_transferBatch->batchControlInfo->fileSequenceNumber->buf
 			<< ( m_transferBatch->batchControlInfo->fileTypeIndicator ? (char*) m_transferBatch->batchControlInfo->fileTypeIndicator->buf : "" )
 			<< ( m_transferBatch->batchControlInfo->rapFileSequenceNumber ? (char*) m_transferBatch->batchControlInfo->rapFileSequenceNumber->buf : "" );
