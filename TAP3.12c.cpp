@@ -16,7 +16,7 @@
 const char *pShortName;
 unsigned char* buffer = NULL;		// буфер для загрузки содержимого файла
 long TapFileID;				// ID TAP-файла в таблице TAP3_FILE
-double dblTAPPower = 1;		// делитель денежных единиц
+// double dblTAPPower = 1;		// делитель денежных единиц
 uint64_t totalCharge=0;			// суммарное начисление (считается без деления на dblTAPPower)
 int totalCallDetailCount=0;
 int debugMode = 0;
@@ -168,6 +168,11 @@ long long OctetStr2Int64(const OCTET_STRING_t& octetStr)
 	return value;
 }
 //----------------------------------
+double GetTAPPower()
+{
+	return pow((double) 10, *dataInterchange->choice.transferBatch.accountingInfo->tapDecimalPlaces);
+}
+
 string GetUTCOffset(int nCode)
 {
 	if (dataInterchange) {
@@ -290,7 +295,7 @@ double GetDiscountRate(int nCode, double& fixedDiscountVal)
 			fixedDiscountVal = 0;
 			return 0;
 		}
-	
+		
 		for(int i=0; i < dataInterchange->choice.transferBatch.accountingInfo->discounting->list.count ; i++)
 		{	
 			if( *dataInterchange->choice.transferBatch.accountingInfo->discounting->list.array[i]->discountCode == nCode) {
@@ -299,7 +304,7 @@ double GetDiscountRate(int nCode, double& fixedDiscountVal)
 					return dataInterchange->choice.transferBatch.accountingInfo->discounting->list.array[i]->discountApplied->choice.discountRate / 100; // discount rate is held in 2 decimal places, see TD.57 v32
 				}
 				else {
-					fixedDiscountVal = OctetStr2Int64(dataInterchange->choice.transferBatch.accountingInfo->discounting->list.array[i]->discountApplied->choice.fixedDiscountValue) / dblTAPPower;
+					fixedDiscountVal = OctetStr2Int64(dataInterchange->choice.transferBatch.accountingInfo->discounting->list.array[i]->discountApplied->choice.fixedDiscountValue) / GetTAPPower();
 					return -1;
 				}
 			}
@@ -360,6 +365,7 @@ long ProcessChrInfo(long long eventID, ChargeInformation* chargeInformation, cha
 			<< otl_null()
 			<< otl_null();
 
+	double dblTAPPower=pow( (double) 10, *dataInterchange->choice.transferBatch.accountingInfo->tapDecimalPlaces);
 	if ( chargeInformation->taxInformation )
 		otlStream
 			<< GetTaxRate( *chargeInformation->taxInformation->list.array[0]->taxCode )
@@ -982,6 +988,10 @@ int LoadTAPFileToDB( unsigned char* buffer, long dataLen, long fileID, long roam
 			log(LOG_ERROR, "Unable to validate TAP file. File is not loaded.");
 			return TL_TAP_NOT_VALIDATED;
 		}
+		else if (validationRes == FILE_DUPLICATION) {
+			// no uploading needed
+			return TL_OK;
+		}
 		
 		if (dataInterchange->present == DataInterChange_PR_notification) {
 			// Processing Notification (empty TAP file, i.e. with no call records)
@@ -1082,15 +1092,15 @@ int LoadTAPFileToDB( unsigned char* buffer, long dataLen, long fileID, long roam
 		else
 			otlStream << otl_null();
 		if (dataInterchange->choice.transferBatch.auditControlInfo->totalCharge)
-			otlStream << OctetStr2Int64(*dataInterchange->choice.transferBatch.auditControlInfo->totalCharge) / dblTAPPower;
+			otlStream << OctetStr2Int64(*dataInterchange->choice.transferBatch.auditControlInfo->totalCharge) / GetTAPPower();
 		else
 			otlStream << otl_null();
 		if (dataInterchange->choice.transferBatch.auditControlInfo->totalTaxValue)
-			otlStream << OctetStr2Int64(*dataInterchange->choice.transferBatch.auditControlInfo->totalTaxValue) / dblTAPPower;
+			otlStream << OctetStr2Int64(*dataInterchange->choice.transferBatch.auditControlInfo->totalTaxValue) / GetTAPPower();
 		else
 			otlStream << otl_null();
 		if (dataInterchange->choice.transferBatch.auditControlInfo->totalDiscountValue)
-			otlStream << OctetStr2Int64(*dataInterchange->choice.transferBatch.auditControlInfo->totalDiscountValue) / dblTAPPower;
+			otlStream << OctetStr2Int64(*dataInterchange->choice.transferBatch.auditControlInfo->totalDiscountValue) / GetTAPPower();
 		else
 			otlStream << otl_null();
 
@@ -1132,7 +1142,6 @@ int LoadTAPFileToDB( unsigned char* buffer, long dataLen, long fileID, long roam
 			// Finish processing here. No call records are uploaded for Fatal Error TAP files
 			return TL_OK;
 		
-		dblTAPPower=pow( (double) 10, *dataInterchange->choice.transferBatch.accountingInfo->tapDecimalPlaces);
 		long long eventID;
 		
 		// обработка звонковых записей
@@ -1191,8 +1200,8 @@ int LoadTAPFileToDB( unsigned char* buffer, long dataLen, long fileID, long roam
 
 		if(!debugMode && totalCharge != OctetStr2Int64(*dataInterchange->choice.transferBatch.auditControlInfo->totalCharge))
 		{
-			log(pShortName, LOG_ERROR, "Calculated total charge (" + to_string(static_cast<unsigned long double> (totalCharge / dblTAPPower)) + ") differs from Audit Control Information/TotalCharge (" +
-				to_string( static_cast<long double> (OctetStr2Int64(*dataInterchange->choice.transferBatch.auditControlInfo->totalCharge)/dblTAPPower)) + ").");
+			log(pShortName, LOG_ERROR, "Calculated total charge (" + to_string(static_cast<unsigned long double> (totalCharge / GetTAPPower())) + ") differs from Audit Control Information/TotalCharge (" +
+				to_string( static_cast<long double> (OctetStr2Int64(*dataInterchange->choice.transferBatch.auditControlInfo->totalCharge)/GetTAPPower())) + ").");
 			return TL_AUDITFAULT;
 		}
 
@@ -1467,11 +1476,12 @@ int LoadRAPSevereReturn(long fileID, const SevereReturn& severeReturn)
 //-----------------------------------------------------
 
 int LoadReturnBatchToDB(ReturnBatch* returnBatch, long fileID, long roamingHubID, string rapFilename, long fileStatus)
-			{
-		// set TAP power value used to convert integer values from file to double values for DB
-		if( returnBatch->rapBatchControlInfoRap.tapDecimalPlaces )
+{
+	// set TAP power value used to convert integer values from file to double values for DB
+	double dblTAPPower;
+	if( returnBatch->rapBatchControlInfoRap.tapDecimalPlaces )
 		dblTAPPower = pow( (double) 10, *returnBatch->rapBatchControlInfoRap.tapDecimalPlaces );
-		else
+	else
 		dblTAPPower = 1;
 
 		otl_nocommit_stream otlStream;
@@ -1483,7 +1493,7 @@ int LoadReturnBatchToDB(ReturnBatch* returnBatch, long fileID, long roamingHubID
 		"RETURN_DETAILS_COUNT, TOTAL_SEVERE_RETURN, TOTAL_SEVERE_RETURN_TAX, STATUS, RAP_VERSION, RAP_RELEASE, FILE_TYPE_INDICATOR, "
 		"TAP_DECIMAL_PLACES, TAP_VERSION, TAP_RELEASE) "
 		"values ("
-		":hfileid /*long,in*/, :filename/*char[255],in*/, :sender/*char[20],in*/, :recipient/*char[20],in*/, :roam_partner/*char[10],in*/, :seq_num/*char[10],in*/,"
+		":hfileid /*long,in*/, :roamhubid /*long,in*/, :filename/*char[255],in*/, :sender/*char[20],in*/, :recipient/*char[20],in*/, :roam_partner/*char[10],in*/, :seq_num/*char[10],in*/,"
 		"to_date(:creation_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :creation_utcoff /* char[10],in */,"
 		"to_date(:available_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :available_utcoff /* char[10],in */,"
 		":tap_currency /* char[255],in */, sysdate, :eventcount /* long,in */, :total_ret /* double,in */, :total_ret_tax /*double,in*/, :status /*long,in*/, "
@@ -1693,8 +1703,7 @@ int LoadRAPAckToDB(unsigned char* buffer, long dataLen, long fileID, long roamin
 
 int main(int argc, const char* argv[])
 {
-	if( argc < mainArgsCount-1 )
-		// last param (config file name) is optional, so don't raise an error
+	if( argc < mainArgsCount )
 		return TL_PARAM_ERROR;
 
 	// установим pShortName на имя файла, отбросив путь

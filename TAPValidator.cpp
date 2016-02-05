@@ -224,21 +224,29 @@ bool TAPValidator::IsRecipientCorrect(string recipient)
 }
 
 
-bool TAPValidator::FileIsDuplicated()
+FileDuplicationCheckRes TAPValidator::IsFileDuplicated()
 {
 	otl_nocommit_stream otlStream;
 	otlStream.open(1, "call BILLING.TAP3.IsTAPFileDuplicated("
 		":sender /*char[20],in*/, :recipient /*char[20],in*/, :roam_hub_id /*long,in*/, :file_seqnum /*char[20],in*/, "
-		":file_type_indic /*char[20],in*/, :rap_file_seqnum /*char[20],in*/) "
+		":file_type_indic /*char[20],in*/, :rap_file_seqnum /*char[20],in*/, :notif /*short,in*/, to_date(:avail_stamp /*char[20],in*/,'yyyymmddhh24miss'),"
+		":event_count /*long,in*/, :total_charge /*double,in*/ ) "
 		"into :res /*long,out*/", m_otlConnect);
+	// TODO: check file contents by total event count, notification/transfer batch, total charge etc.
+	// If contents are the same just ignore this file. Otherwise create RAP.
 	if (m_transferBatch) {
+		double tapPower=pow( (double) 10, *m_transferBatch->accountingInfo->tapDecimalPlaces);
 		otlStream
 			<< m_transferBatch->batchControlInfo->sender->buf
 			<< m_transferBatch->batchControlInfo->recipient->buf
 			<< m_roamingHubID
 			<< m_transferBatch->batchControlInfo->fileSequenceNumber->buf
 			<< ( m_transferBatch->batchControlInfo->fileTypeIndicator ? (char*) m_transferBatch->batchControlInfo->fileTypeIndicator->buf : "" )
-			<< ( m_transferBatch->batchControlInfo->rapFileSequenceNumber ? (char*) m_transferBatch->batchControlInfo->rapFileSequenceNumber->buf : "" );
+			<< ( m_transferBatch->batchControlInfo->rapFileSequenceNumber ? (char*) m_transferBatch->batchControlInfo->rapFileSequenceNumber->buf : "" )
+			<< (short) 0 /* notification */
+			 << m_transferBatch->batchControlInfo->fileAvailableTimeStamp->localTimeStamp->buf
+			<< ( m_transferBatch->auditControlInfo->callEventDetailsCount ? *m_transferBatch->auditControlInfo->callEventDetailsCount : 0L )
+			<< OctetStr2Int64(*m_transferBatch->auditControlInfo->totalCharge) / tapPower;
 	}
 	else {
 		otlStream
@@ -246,16 +254,22 @@ bool TAPValidator::FileIsDuplicated()
 			<< m_notification->recipient->buf
 			<< m_notification->fileSequenceNumber->buf
 			<< ( m_notification->fileTypeIndicator ? (char*) m_notification->fileTypeIndicator->buf : "" )
-			<< ( m_notification->rapFileSequenceNumber ? (char*) m_notification->rapFileSequenceNumber->buf : "" );
+			<< ( m_notification->rapFileSequenceNumber ? (char*) m_notification->rapFileSequenceNumber->buf : "" )
+			<< (short) 1 /* notification */
+			<< m_notification->fileAvailableTimeStamp->localTimeStamp->buf
+			<< 0
+			<< 0;
 	}
 
 	long result;
 	otlStream >> result;
 	otlStream.close();
-	if (result > 0)
-		return true;
-	else
-		return false;
+	if(result < 0)
+	{
+		log(LOG_ERROR, "TAP3.IsTAPFileDuplicated returned error " + to_string((long long) result));
+		result = DUPLICATION_CHECK_ERROR;
+	}
+	return (FileDuplicationCheckRes) result;
 }
 
 
@@ -534,13 +548,23 @@ TAPValidationResult TAPValidator::ValidateBatchControlInfo()
 		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
 	}
 
-	if (FileIsDuplicated()) {
-		vector<ErrContextAsnItem> asnItems;
-		asnItems.push_back(ErrContextAsnItem(&asn_DEF_FileSequenceNumber, 0));
-		int createRapRes = CreateBatchControlInfoRAPFile(
-			"Duplication: File sequence number of the received file has already been received and successfully processed", 
-			FILE_SEQ_NUM_DUPLICATION, asnItems);
-		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
+	FileDuplicationCheckRes checkRes = IsFileDuplicated();
+	int createRapRes;
+	vector<ErrContextAsnItem> asnItems;
+	switch (checkRes) {
+		case DUPLICATION_NOTFOUND:
+			return TAP_VALID;
+		case COPY_FOUND:
+			log(LOG_INFO, "File having same sequence number has already been received and processed. No loading is needed.");
+			return FILE_DUPLICATION;
+		case DUPLICATION_FOUND:
+			asnItems.push_back(ErrContextAsnItem(&asn_DEF_FileSequenceNumber, 0));
+			createRapRes = CreateBatchControlInfoRAPFile(
+				"Duplication: File sequence number of the received file has already been received and successfully processed",
+				FILE_SEQ_NUM_DUPLICATION, asnItems);
+			return ( createRapRes >= 0 ? FILE_DUPLICATION : VALIDATION_IMPOSSIBLE );
+		case DUPLICATION_CHECK_ERROR:
+			return VALIDATION_IMPOSSIBLE;
 	}
 
 	return TAP_VALID;

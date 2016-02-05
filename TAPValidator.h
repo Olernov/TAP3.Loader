@@ -16,7 +16,8 @@ enum TAPValidationResult
 	FATAL_ERROR = 1,
 	SEVERE_ERROR = 2,
 	VALIDATION_IMPOSSIBLE = 3,
-	WRONG_ADDRESSEE = 5
+	WRONG_ADDRESSEE = 5,
+	FILE_DUPLICATION = 6
 };
 
 enum TAPValidationErrors
@@ -69,6 +70,14 @@ enum TAPValidationErrors
 	TOTAL_CHARGE_MISMATCH = 100
 };
 
+enum FileDuplicationCheckRes
+{
+	DUPLICATION_NOTFOUND	= 0,
+	COPY_FOUND				= 1,
+	DUPLICATION_FOUND		= 2,
+	DUPLICATION_CHECK_ERROR = -1
+};
+
 class ErrContextAsnItem
 {
 public:
@@ -112,7 +121,7 @@ private:
 	string m_rapSequenceNum;
 
 	bool IsRecipientCorrect(string recipient);
-	bool FileIsDuplicated();
+	FileDuplicationCheckRes IsFileDuplicated();
 	bool BatchContainsTaxes();
 	bool BatchContainsDiscounts();
 	bool ChargeInfoContainsPositiveCharges(ChargeInformation* chargeInfo);
