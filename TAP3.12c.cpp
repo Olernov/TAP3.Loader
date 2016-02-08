@@ -16,7 +16,6 @@
 const char *pShortName;
 unsigned char* buffer = NULL;		// буфер для загрузки содержимого файла
 long TapFileID;				// ID TAP-файла в таблице TAP3_FILE
-// double dblTAPPower = 1;		// делитель денежных единиц
 uint64_t totalCharge=0;			// суммарное начисление (считается без деления на dblTAPPower)
 int totalCallDetailCount=0;
 int debugMode = 0;
