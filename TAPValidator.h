@@ -122,6 +122,7 @@ private:
 
 	bool IsRecipientCorrect(string recipient);
 	FileDuplicationCheckRes IsFileDuplicated();
+	TAPValidationResult FileSequenceNumberControl();
 	bool BatchContainsTaxes();
 	bool BatchContainsDiscounts();
 	bool ChargeInfoContainsPositiveCharges(ChargeInformation* chargeInfo);

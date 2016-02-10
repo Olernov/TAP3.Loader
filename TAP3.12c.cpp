@@ -1182,6 +1182,7 @@ int LoadTAPFileToDB( unsigned char* buffer, long dataLen, long fileID, long roam
 			
 		}
 
+		// TODO: disable, move to TAP Validator
 		// обработка Audit Control Info
 		if(!dataInterchange->choice.transferBatch.auditControlInfo->totalCharge || !dataInterchange->choice.transferBatch.auditControlInfo->callEventDetailsCount)
 		{

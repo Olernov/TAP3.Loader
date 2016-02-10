@@ -252,13 +252,14 @@ FileDuplicationCheckRes TAPValidator::IsFileDuplicated()
 		otlStream
 			<< m_notification->sender->buf
 			<< m_notification->recipient->buf
+			<< m_roamingHubID
 			<< m_notification->fileSequenceNumber->buf
 			<< ( m_notification->fileTypeIndicator ? (char*) m_notification->fileTypeIndicator->buf : "" )
 			<< ( m_notification->rapFileSequenceNumber ? (char*) m_notification->rapFileSequenceNumber->buf : "" )
 			<< (short) 1 /* notification */
 			<< m_notification->fileAvailableTimeStamp->localTimeStamp->buf
-			<< 0
-			<< 0;
+			<< 0L
+			<< 0.0;
 	}
 
 	long result;
@@ -496,6 +497,28 @@ int TAPValidator::CreateBatchControlInfoRAPFile(string logMessage, int errorCode
 	return loadRes;
 }
 
+TAPValidationResult TAPValidator::FileSequenceNumberControl()
+{
+	TAPValidationResult res;
+	FileDuplicationCheckRes checkRes = IsFileDuplicated();
+	int createRapRes;
+	vector<ErrContextAsnItem> asnItems;
+	switch (checkRes) {
+		case DUPLICATION_NOTFOUND:
+			return TAP_VALID;
+		case COPY_FOUND:
+			log(LOG_INFO, "File having same sequence number has already been received and processed. No loading is needed.");
+			return FILE_DUPLICATION;
+		case DUPLICATION_FOUND:
+			asnItems.push_back(ErrContextAsnItem(&asn_DEF_FileSequenceNumber, 0));
+			createRapRes = CreateBatchControlInfoRAPFile(
+				"Duplication: File sequence number of the received file has already been received and successfully processed",
+				FILE_SEQ_NUM_DUPLICATION, asnItems);
+			return ( createRapRes >= 0 ? FILE_DUPLICATION : VALIDATION_IMPOSSIBLE );
+		case DUPLICATION_CHECK_ERROR:
+			return VALIDATION_IMPOSSIBLE;
+	}
+}
 
 TAPValidationResult TAPValidator::ValidateBatchControlInfo()
 {
@@ -548,26 +571,7 @@ TAPValidationResult TAPValidator::ValidateBatchControlInfo()
 		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
 	}
 
-	FileDuplicationCheckRes checkRes = IsFileDuplicated();
-	int createRapRes;
-	vector<ErrContextAsnItem> asnItems;
-	switch (checkRes) {
-		case DUPLICATION_NOTFOUND:
-			return TAP_VALID;
-		case COPY_FOUND:
-			log(LOG_INFO, "File having same sequence number has already been received and processed. No loading is needed.");
-			return FILE_DUPLICATION;
-		case DUPLICATION_FOUND:
-			asnItems.push_back(ErrContextAsnItem(&asn_DEF_FileSequenceNumber, 0));
-			createRapRes = CreateBatchControlInfoRAPFile(
-				"Duplication: File sequence number of the received file has already been received and successfully processed",
-				FILE_SEQ_NUM_DUPLICATION, asnItems);
-			return ( createRapRes >= 0 ? FILE_DUPLICATION : VALIDATION_IMPOSSIBLE );
-		case DUPLICATION_CHECK_ERROR:
-			return VALIDATION_IMPOSSIBLE;
-	}
-
-	return TAP_VALID;
+	return FileSequenceNumberControl();
 }
 
 
@@ -713,8 +717,7 @@ TAPValidationResult TAPValidator::ValidateAccountingInfo()
 				exchangeRateCodes.insert(*m_transferBatch->accountingInfo->currencyConversionInfo->list.array[i]->exchangeRateCode);
 			}
 			// check exchange rate code
-			// TODO: add checks
-			// ...
+			// TODO: add checks ?
 		}
 	}
 
@@ -1202,9 +1205,7 @@ TAPValidationResult TAPValidator::ValidateNotification()
 			FILE_SEQ_NUM_OUT_OF_RANGE, asnItems);
 		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
 	}
-	// TODO: add duplication checks for file seq num
-
-	return TAP_VALID;
+	return FileSequenceNumberControl();
 }
 
 
