@@ -139,14 +139,14 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>c:\Projects\LibNCFtp\Strn;c:\Projects\LibNCFtp\sio;c:\Projects\LibNCFtp\libncftp;C:\Oracle\product\11.2.0\client_1\oci\include;c:\Projects\TAP3\TAP3.12_Loader\;c:\Projects\TAP3\TAP3\ASN_Structures\;c:\Projects\TAP3\TAP3\RAP_ASN_Structures\;c:\Projects\TAP3\</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>c:\Projects\LibNCFtp\Strn;c:\Projects\LibNCFtp\sio;c:\Projects\LibNCFtp\libncftp</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>false</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies);ws2_32.lib;oci.lib;strn.lib;libncftp.lib;sio.lib</AdditionalDependencies>
+      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies);oci.lib;ws2_32.lib;strn.lib;libncftp.lib;sio.lib</AdditionalDependencies>
       <ModuleDefinitionFile>TAP3_Loader.def</ModuleDefinitionFile>
       <AdditionalLibraryDirectories>c:\Projects\LibNCFtp\libncftp\Release\;C:\Oracle\product\11.2.0\client_1\oci\lib\msvc;</AdditionalLibraryDirectories>
     </Link>

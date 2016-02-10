@@ -96,6 +96,8 @@ otl_connect otlConnect;
 otl_connect otlLogConnect;
 ofstream ofsLog;
 
+const short mainArgsCount = 5;
+
 enum FileType {
 	ftTAP = 0,
 	ftRAP = 1,
@@ -1003,7 +1005,7 @@ void Finalize(bool bSuccess = false)
 }
 //------------------------------
 
-int LoadTAPFileToDB( unsigned char* buffer, long dataLen, long fileID, bool bPrintOnly ) 
+int LoadTAPFileToDB( unsigned char* buffer, long dataLen, long fileID, long roamingHubID, bool bPrintOnly ) 
 {
 	int index=0;
 	try {
@@ -1039,16 +1041,17 @@ int LoadTAPFileToDB( unsigned char* buffer, long dataLen, long fileID, bool bPri
 		if (dataInterchange->present == DataInterChange_PR_notification) {
 			// Processing Notification (empty TAP file, i.e. with no call records)
 			otlStream.open( 1 /*stream buffer size in logical rows*/, 
-				"insert into BILLING.TAP3_FILE (FILE_ID, FILENAME, SENDER, RECIPIENT, SEQUENCE_NUMBER , CREATION_STAMP, CREATION_UTCOFF,\
+				"insert into BILLING.TAP3_FILE (FILE_ID, ROAMINGHUB_ID, FILENAME, SENDER, RECIPIENT, SEQUENCE_NUMBER , CREATION_STAMP, CREATION_UTCOFF,\
 				CUTOFF_STAMP, CUTOFF_UTCOFF, AVAILABLE_STAMP, AVAILABLE_UTCOFF, LOAD_TIME, NOTIFICATION, STATUS, TAP_VERSION, TAP_RELEASE, FILE_TYPE_INDICATOR) \
 				values (\
-				  :hfileid /*long,in*/, :filename/*char[255],in*/, :sender/*char[20],in*/, :recipient/*char[20],in*/, :seq_num/*char[10],in*/,\
+				  :hfileid /*long,in*/, :roamhubid /*long,in*/, :filename/*char[255],in*/, :sender/*char[20],in*/, :recipient/*char[20],in*/, :seq_num/*char[10],in*/,\
 				  to_date(:creation_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :creation_utcoff /* char[10],in */,\
 				  to_date(:cutoff_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :cutoff_utcoff /* char[10],in */,\
 				  				  to_date(:available_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :available_utcoff /* char[10],in */, sysdate, 1 /*notification*/, :status /*long,in*/,\
 				  :tapVer /*long,in*/, :specif /*long,in*/, :filetype /*char[5],in*/ )", otlConnect); 
 			otlStream
 				<< fileID
+				<< roamingHubID
 				<< pShortName 
 				<< (char*) dataInterchange->choice.notification.sender->buf 
 				<< (char*) dataInterchange->choice.notification.recipient->buf 
@@ -1110,12 +1113,12 @@ int LoadTAPFileToDB( unsigned char* buffer, long dataLen, long fileID, bool bPri
 
 		// REGISTER TAP FILE IN DB CODE
 		otlStream.open( 1 /*stream buffer size in logical rows*/, 
-			"insert into BILLING.TAP3_FILE (FILE_ID, FILENAME, SENDER, RECIPIENT, SEQUENCE_NUMBER , CREATION_STAMP, CREATION_UTCOFF,\
+			"insert into BILLING.TAP3_FILE (FILE_ID, ROAMINGHUB_ID, FILENAME, SENDER, RECIPIENT, SEQUENCE_NUMBER , CREATION_STAMP, CREATION_UTCOFF,\
 			CUTOFF_STAMP, CUTOFF_UTCOFF, AVAILABLE_STAMP, AVAILABLE_UTCOFF, LOCAL_CURRENCY, LOAD_TIME, EARLIEST_TIME, EARLIEST_UTCOFF, \
 			LATEST_TIME, LATEST_UTCOFF, EVENT_COUNT, TOTAL_CHARGE, TOTAL_TAX, TOTAL_DISCOUNT, NOTIFICATION, STATUS, TAP_VERSION, TAP_RELEASE, FILE_TYPE_INDICATOR, \
 			TAP_DECIMAL_PLACES) \
 			values (\
-			  :hfileid /*long,in*/, :filename/*char[255],in*/, :sender/*char[20],in*/, :recipient/*char[20],in*/, :seq_num/*char[10],in*/,\
+			  :hfileid /*long,in*/, :roamhubid /*long,in*/, :filename/*char[255],in*/, :sender/*char[20],in*/, :recipient/*char[20],in*/, :seq_num/*char[10],in*/,\
 			  to_date(:creation_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :creation_utcoff /* char[10],in */,\
 			  to_date(:cutoff_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :cutoff_utcoff /* char[10],in */,\
 			  to_date(:available_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :available_utcoff /* char[10],in */,\
@@ -1125,6 +1128,7 @@ int LoadTAPFileToDB( unsigned char* buffer, long dataLen, long fileID, bool bPri
 			  :tapDecimalPlaces /*long,in*/) ", otlConnect);
 		otlStream 
 			<< fileID
+			<< roamingHubID
 			<< pShortName 
 			<< (char*) dataInterchange->choice.transferBatch.batchControlInfo->sender->buf 
 			<< (char*) dataInterchange->choice.transferBatch.batchControlInfo->recipient->buf 
@@ -1488,7 +1492,7 @@ int LoadRAPSevereReturn(long fileID, const SevereReturn& severeReturn)
 
 //-----------------------------------------------------
 
-int LoadRAPFileToDB( unsigned char* buffer, long dataLen, long fileID, bool bPrintOnly ) 
+int LoadRAPFileToDB( unsigned char* buffer, long dataLen, long fileID, long roamingHubID, bool bPrintOnly ) 
 {
 	int index=0;
 	try {
@@ -1529,12 +1533,12 @@ int LoadRAPFileToDB( unsigned char* buffer, long dataLen, long fileID, bool bPri
 		
 		// REGISTER RAP FILE IN DB 
 		otlStream.open( 1 /*stream buffer size in logical rows*/, 
-			"insert into BILLING.RAP_FILE (FILE_ID, FILENAME, SENDER, RECIPIENT, ROAMING_PARTNER, SEQUENCE_NUMBER , CREATION_STAMP, CREATION_UTCOFF,\
+			"insert into BILLING.RAP_FILE (FILE_ID, ROAMINGHUB_ID, FILENAME, SENDER, RECIPIENT, ROAMING_PARTNER, SEQUENCE_NUMBER , CREATION_STAMP, CREATION_UTCOFF,\
 			AVAILABLE_STAMP, AVAILABLE_UTCOFF, TAP_CURRENCY, LOAD_TIME, \
 			RETURN_DETAILS_COUNT, TOTAL_SEVERE_RETURN, TOTAL_SEVERE_RETURN_TAX, STATUS, RAP_VERSION, RAP_RELEASE, FILE_TYPE_INDICATOR, \
 			TAP_DECIMAL_PLACES, TAP_VERSION, TAP_RELEASE) \
 			values (\
-			  :hfileid /*long,in*/, :filename/*char[255],in*/, :sender/*char[20],in*/, :recipient/*char[20],in*/, :roam_partner/*char[10],in*/, :seq_num/*char[10],in*/,\
+			  :hfileid /*long,in*/, :roamhubid /*long,in*/, :filename/*char[255],in*/, :sender/*char[20],in*/, :recipient/*char[20],in*/, :roam_partner/*char[10],in*/, :seq_num/*char[10],in*/,\
 			  to_date(:creation_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :creation_utcoff /* char[10],in */,\
 			  to_date(:available_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :available_utcoff /* char[10],in */,\
 			  :tap_currency /* char[255],in */, sysdate, :eventcount /* long,in */, :total_ret /* double,in */, :total_ret_tax /*double,in*/, 0 /*status*/, \
@@ -1543,6 +1547,7 @@ int LoadRAPFileToDB( unsigned char* buffer, long dataLen, long fileID, bool bPri
 
 		otlStream 
 			<< fileID
+			<< roamingHubID
 			<< pShortName 
 			<< returnBatch->rapBatchControlInfoRap.sender.buf
 			<< returnBatch->rapBatchControlInfoRap.recipient.buf
@@ -1634,7 +1639,7 @@ int LoadRAPFileToDB( unsigned char* buffer, long dataLen, long fileID, bool bPri
 
 //------------------------------
 
-int LoadRAPAckToDB(unsigned char* buffer, long dataLen, long fileID, bool bPrintOnly)
+int LoadRAPAckToDB(unsigned char* buffer, long dataLen, long fileID, long roamingHubID, bool bPrintOnly)
 {
 	asn_dec_rval_t rval;
 
@@ -1705,7 +1710,8 @@ int LoadRAPAckToDB(unsigned char* buffer, long dataLen, long fileID, bool bPrint
 
 int main(int argc, const char* argv[])
 {
-	if( argc < 3 )
+	if( argc < mainArgsCount-1 )
+		// last param (config file name) is optional, so don't raise an error
 		return TL_PARAM_ERROR;
 
 	// установим pShortName на имя файла, отбросив путь
@@ -1726,6 +1732,12 @@ int main(int argc, const char* argv[])
 		return TL_FILEERROR ;
 	}
 
+	long roamingHubID = strtol(argv[3], NULL, 10);
+	if( roamingHubID == 0 ) {
+		log( LOG_ERROR, string("Wrong value of roamingHubID given in 3nd parameter: ") + argv[3] );
+		return TL_FILEERROR ;
+	}
+
 	// установим тип файла
 	FileType fileType;
 	if( !strnicmp(pShortName, "CD", 2) || !strnicmp(pShortName, "TD", 2))
@@ -1739,11 +1751,9 @@ int main(int argc, const char* argv[])
 		Finalize();
 		return TL_FILEERROR;
 	}
-	
 
 	int index=0;
 	try {
-
 		// чтение файла конфигурации
 		string line;
 		string option_name;
@@ -1753,10 +1763,11 @@ int main(int argc, const char* argv[])
 		string ftpUsername;
 		string ftpPassword;
 		string ftpDirectory;
+		const char* configFilename = strlen(argv[4]) > 0 ? argv[4] : "TAP3Loader.cfg";
 
-		ifstream ifsSettings ("TAP3Loader.cfg", ifstream::in);
+		ifstream ifsSettings (configFilename, ifstream::in);
 		if (!ifsSettings.is_open())	{
-			fprintf( stderr, "Unable to open config file TAP3Loader.cfg");
+			log( LOG_ERROR, string("Unable to open config file ") + configFilename);
 			if( buffer ) delete [] buffer;
 			return TL_PARAM_ERROR;
 		}
@@ -1820,16 +1831,15 @@ int main(int argc, const char* argv[])
 			delete [] buffer;
 			return TL_FILEERROR;
 		}
-		
 
 		bool bPrintOnly = false;
-		if(argc>3) {
-			if(!strcmp(argv[3], "-p") || !strcmp(argv[3], "-P")) {
+		if(argc > mainArgsCount) {
+			if(!strcmp(argv[mainArgsCount], "-p") || !strcmp(argv[mainArgsCount], "-P")) {
 				// key to print contents of file. No upload to DB is needed.
 				bPrintOnly = true;
 			}
 
-			if(!strcmp(argv[3], "-d") || !strcmp(argv[3], "-D")) {
+			if(!strcmp(argv[mainArgsCount], "-d") || !strcmp(argv[mainArgsCount], "-D")) {
 				// debugMode = 1;
 			}
 		}
@@ -1851,13 +1861,12 @@ int main(int argc, const char* argv[])
 			if(ofsLog.is_open()) ofsLog.close();
 			return TL_CONNECTERROR; 
 		}
-	
 		
 		int res;
 		switch( fileType ) {
 		case ftTAP:
 			log(LOG_INFO, "--------- Loading TAP3 file (ID " + to_string((long long) fileID)+") started ---------");
-			res = LoadTAPFileToDB( buffer, tapFileLen, fileID, bPrintOnly ) ; 
+			res = LoadTAPFileToDB( buffer, tapFileLen, fileID, roamingHubID, bPrintOnly ) ; 
 			if (res == TL_OK)
 				log(LOG_INFO, "--------- Loading TAP3 file (ID " + to_string((long long)fileID) + ") finished successfully ---------");
 			else
@@ -1866,7 +1875,7 @@ int main(int argc, const char* argv[])
 			return res;
 		case ftRAP:
 			log(LOG_INFO, "--------- Loading RAP file (ID " + to_string((long long) fileID) + ") started ---------");
-			res = LoadRAPFileToDB( buffer, tapFileLen, fileID, bPrintOnly ) ; 
+			res = LoadRAPFileToDB( buffer, tapFileLen, fileID, roamingHubID, bPrintOnly ) ; 
 			if (res == TL_OK)
 				log(LOG_INFO, "--------- Loading RAP file (ID " + to_string((long long)fileID) + ") finished successfully ---------");
 			else
@@ -1875,7 +1884,7 @@ int main(int argc, const char* argv[])
 			return res;
 		case ftRAPAcknowledgement:
 			log(LOG_INFO, "--------- Loading RAP Acknowledgement file (ID " + to_string((long long) fileID) + ") started ---------");
-			res = LoadRAPAckToDB(buffer, tapFileLen, fileID, bPrintOnly);
+			res = LoadRAPAckToDB(buffer, tapFileLen, fileID, roamingHubID, bPrintOnly);
 			if (res == TL_OK)
 				log(LOG_INFO, "--------- Loading RAP Acknowledgement file (ID " + to_string((long long)fileID) + ") finished successfully ---------");
 			else
@@ -1918,9 +1927,11 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 //---------------------------------
 // Function exported by DLL
 //---------------------------------
-__declspec (dllexport) int __stdcall LoadFileToDB(char* pFilename, long fileID)
+__declspec (dllexport) int __stdcall LoadFileToDB(char* pFilename, long fileID, long roamingHubID, char* pConfigFilename)
 {
-	const char* pArgv[] = { "TAP3Loader.exe", pFilename, to_string(static_cast<unsigned long long> (fileID)).c_str() };
-
-	return main(3, pArgv);
+	string strFileID = to_string ((unsigned long long) fileID);
+	string strRoamHubID = to_string((unsigned long long) roamingHubID);
+	const char* pArgv[] = { "TAP3Loader.exe", pFilename, strFileID.c_str(), strRoamHubID.c_str(), pConfigFilename };
+	
+	return main(mainArgsCount, pArgv);
 }
