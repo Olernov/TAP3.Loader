@@ -364,7 +364,8 @@ long ProcessChrInfo(long long eventID, ChargeInformation* chargeInformation, cha
 			<< otl_null()
 			<< otl_null();
 
-	double dblTAPPower=pow( (double) 10, *dataInterchange->choice.transferBatch.accountingInfo->tapDecimalPlaces);
+	double dblTAPPower=pow( (double) 10, dataInterchange ? *dataInterchange->choice.transferBatch.accountingInfo->tapDecimalPlaces :
+															*returnBatch->rapBatchControlInfoRap.tapDecimalPlaces);
 	if ( chargeInformation->taxInformation )
 		otlStream
 			<< GetTaxRate( *chargeInformation->taxInformation->list.array[0]->taxCode )

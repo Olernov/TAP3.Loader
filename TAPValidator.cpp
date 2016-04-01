@@ -518,6 +518,7 @@ TAPValidationResult TAPValidator::FileSequenceNumberControl()
 		case DUPLICATION_CHECK_ERROR:
 			return VALIDATION_IMPOSSIBLE;
 	}
+	// TODO: check sequence rollover and set date
 }
 
 TAPValidationResult TAPValidator::ValidateBatchControlInfo()
