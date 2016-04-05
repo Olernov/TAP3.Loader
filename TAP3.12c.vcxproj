@@ -564,6 +564,7 @@
     <ClInclude Include="otlv4.h" />
     <ClInclude Include="OTL_Header.h" />
     <ClInclude Include="stdafx.h" />
+    <ClInclude Include="TAPValidator.h" />
     <ClInclude Include="targetver.h" />
   </ItemGroup>
   <ItemGroup>
@@ -972,6 +973,7 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='DLL Release|Win32'">Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="TAP3.12c.cpp" />
+    <ClCompile Include="TAPValidator.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

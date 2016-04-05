@@ -1236,6 +1236,9 @@
     <ClInclude Include="..\..\ConfigContainer.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="TAPValidator.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="OTL_Header.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -2436,6 +2439,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\..\ConfigContainer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="TAPValidator.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\TAP3_Writer\gpshare.c">
