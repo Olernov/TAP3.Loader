@@ -17,7 +17,9 @@ enum TAPValidationResult
 	SEVERE_ERROR = 2,
 	VALIDATION_IMPOSSIBLE = 3,
 	WRONG_ADDRESSEE = 5,
-	FILE_DUPLICATION = 6
+	FILE_DUPLICATION = 6,
+	RAEX_IOT_VALID = 0,
+	RAEX_IOT_INVALID = 7
 };
 
 enum TAPValidationErrors
@@ -106,7 +108,8 @@ class TAPValidator
 {
 public:
 	TAPValidator(otl_connect&, Config&);
-	TAPValidationResult Validate(DataInterChange*, long);
+	TAPValidationResult Validate(DataInterChange*, long, long);
+	long ValidateCallIOT(long long eventID);
 	long GetRapFileID();
 	string GetRapSequenceNum();
 private:
@@ -117,6 +120,7 @@ private:
 	Notification* m_notification;
 
 	long m_rapFileID;
+	long m_mobileNetworkID;
 	long m_roamingHubID;
 	string m_rapSequenceNum;
 

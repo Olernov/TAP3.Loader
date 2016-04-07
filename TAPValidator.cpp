@@ -516,6 +516,7 @@ TAPValidationResult TAPValidator::FileSequenceNumberControl()
 				FILE_SEQ_NUM_DUPLICATION, asnItems);
 			return ( createRapRes >= 0 ? FILE_DUPLICATION : VALIDATION_IMPOSSIBLE );
 		case DUPLICATION_CHECK_ERROR:
+		default:
 			return VALIDATION_IMPOSSIBLE;
 	}
 	// TODO: check sequence rollover and set date
@@ -1210,8 +1211,9 @@ TAPValidationResult TAPValidator::ValidateNotification()
 }
 
 
-TAPValidationResult TAPValidator::Validate(DataInterChange* dataInterchange, long roamingHubID)
+TAPValidationResult TAPValidator::Validate(DataInterChange* dataInterchange, long mobileNetworkID, long roamingHubID)
 {
+	m_mobileNetworkID = mobileNetworkID;
 	m_roamingHubID = roamingHubID;
 	switch (dataInterchange->present) {
 		case DataInterChange_PR_transferBatch:
@@ -1235,4 +1237,31 @@ long TAPValidator::GetRapFileID()
 string TAPValidator::GetRapSequenceNum()
 {
 	return m_rapSequenceNum;
+}
+
+long TAPValidator::ValidateCallIOT(long long eventID)
+{
+	otl_nocommit_stream otlStream;
+	otlStream.open(1, "call BILLING.TAP3_IOT.ValidateTapCall(:event_id /*bigint,in*/, :err_descr /*char[255],out*/) "
+		"into :res /*long,out*/", m_otlConnect);
+	otlStream << eventID;
+	long res;
+	string errorDescr;
+	otlStream
+		>> errorDescr
+		>> res;
+
+	otlStream.close();
+	if (res != RAEX_IOT_VALID) {
+		otlStream.open( 1,
+			"insert into BILLING.TAP3_VALIDATION_LOG (EVENT_ID, VALIDATION_TIME, RESULT, DESCRIPTION) "
+			"values ("
+			  ":eventid /*bigint,in*/, sysdate, :res /*long,in*/, :descr/*char[255],in*/) ", m_otlConnect);
+		otlStream
+			<< eventID
+			<< res
+			<< errorDescr;
+		otlStream.close();
+	}
+	return res;
 }

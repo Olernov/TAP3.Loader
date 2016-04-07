@@ -276,7 +276,8 @@ double GetTaxRate(int nCode)
 		for(int i=0; i < dataInterchange->choice.transferBatch.accountingInfo->taxation->list.count ; i++)
 		{	
 			if( *dataInterchange->choice.transferBatch.accountingInfo->taxation->list.array[i]->taxCode == nCode)
-				return strtol((const char*)dataInterchange->choice.transferBatch.accountingInfo->taxation->list.array[i]->taxRate->buf, &pend, 10) / 100000 / 100; // The rate is given to 5 decimal places, see TD.57 v32 and expresses in percents
+				return strtol((const char*)dataInterchange->choice.transferBatch.accountingInfo->taxation->list.array[i]->taxRate->buf, &pend, 10) 
+					/ 100000 / 100; // The rate is given to 5 decimal places, see TD.57 v32 and expresses in percents
 		}
 		// неверный код exchange rate
 		throw "e_wrong_tax_rate_code";
@@ -285,6 +286,29 @@ double GetTaxRate(int nCode)
 		// объект dataInterchange не инициализирован, возможно происходит загрузка RAP-файла
 		return 0;
 	}
+}
+//-------------------------------
+long GetSenderNetworkID(long& iotValidationMode)
+{
+	otl_nocommit_stream otlStream;
+	otlStream.open(1, "call BILLING.TAP3.GetSenderNetworkID(:sender /*char[20],in*/) "
+		"into :res /*long,out*/", otlConnect);
+	if (dataInterchange->present == DataInterChange_PR_transferBatch) 
+		otlStream
+			<< dataInterchange->choice.transferBatch.batchControlInfo->sender->buf;
+	else
+		otlStream
+			<< dataInterchange->choice.notification.sender->buf;
+	long mobileNetworkID;
+	otlStream >> mobileNetworkID;
+	otlStream.close();
+	otlStream.open(1, "select nvl(iot_validation_mode_id, :iot_no_need /*long,in*/) from BILLING.TMobileNetwork "
+		"where object_no = :mobilenetworkid /*long,in*/", otlConnect);
+	otlStream 
+		<< IOT_NO_NEED
+		<< mobileNetworkID;
+	otlStream >> iotValidationMode;
+	return mobileNetworkID;
 }
 //-------------------------------
 double GetDiscountRate(int nCode, double& fixedDiscountVal)
@@ -949,6 +973,76 @@ void Finalize(bool bSuccess = false)
 	if (buffer ) delete [] buffer;
 }
 //------------------------------
+int LoadTAPEventsToDB(long fileID, long iotValidationMode)
+{
+	long long eventID;
+	long validationRes;
+	otl_nocommit_stream otlCallUpdater;
+	// обработка звонковых записей
+	for(int index=1; index <= dataInterchange->choice.transferBatch.callEventDetails->list.count; index++)
+	{
+		TAPValidator callValidator(otlConnect, config);
+		switch( dataInterchange->choice.transferBatch.callEventDetails->list.array[index-1]->present) {
+		case CallEventDetail_PR_mobileOriginatedCall:
+			if ((eventID = ProcessOriginatedCall(fileID, index,
+					&dataInterchange->choice.transferBatch.callEventDetails->list.array[index - 1]->choice.mobileOriginatedCall)) < 0) {
+				// ошибка загрузки
+				return (long) eventID;
+			}
+			if (iotValidationMode != IOT_NO_NEED) {
+				validationRes = callValidator.ValidateCallIOT(eventID);
+				if (iotValidationMode == IOT_DROPOUT_ALERT || iotValidationMode == IOT_RAP_DROPOUT_ALERT) {
+					otlCallUpdater.open(1,
+						"update BILLING.TAP3_CALL SET IOT_VALIDATION_RES = :res /*long,in*/ WHERE EVENT_ID=:eventid /*bigint,in*/", otlConnect);
+					otlCallUpdater
+						<< (long) validationRes
+						<< eventID;
+					otlCallUpdater.close();
+				}
+			}
+			break;
+		case CallEventDetail_PR_mobileTerminatedCall:
+			if ((eventID = ProcessTerminatedCall(fileID, index, 
+					&dataInterchange->choice.transferBatch.callEventDetails->list.array[index - 1]->choice.mobileTerminatedCall)) < 0) {
+				// ошибка загрузки
+				return (long)eventID;
+			}
+			if (iotValidationMode != IOT_NO_NEED) {
+				validationRes = callValidator.ValidateCallIOT(eventID);
+				if (iotValidationMode == IOT_DROPOUT_ALERT || iotValidationMode == IOT_RAP_DROPOUT_ALERT) {
+					otlCallUpdater.open(1,
+						"update BILLING.TAP3_CALL SET IOT_VALIDATION_RES = :res /*long,in*/ WHERE EVENT_ID=:eventid /*bigint,in*/", otlConnect);
+					otlCallUpdater
+						<< (long) validationRes
+						<< eventID;
+					otlCallUpdater.close();
+				}
+			}
+			break;
+		case CallEventDetail_PR_supplServiceEvent:
+			// at this time we just ignore it
+			break;
+
+		case CallEventDetail_PR_gprsCall:
+			if ((eventID = ProcessGPRSCall(fileID, index, 
+					&dataInterchange->choice.transferBatch.callEventDetails->list.array[index - 1]->choice.gprsCall)) < 0) {
+				// ошибка загрузки
+				return (long) eventID;
+			}
+			// TODO: add validation	
+			break;
+		default:
+			if (!debugMode) {
+				log(pShortName, LOG_ERROR, string("No handler for call event detail type=") + 
+					to_string( static_cast<unsigned long long> (dataInterchange->choice.transferBatch.callEventDetails->list.array[index-1]->present)) +
+					string(". Call number=") + to_string(static_cast<unsigned long long> (index)));
+				return TL_NEWCOMPONENT;
+			}
+		}
+	}
+	return TL_OK;
+}
+
 
 int LoadTAPFileToDB( unsigned char* buffer, long dataLen, long fileID, long roamingHubID, bool bPrintOnly ) 
 {
@@ -981,9 +1075,14 @@ int LoadTAPFileToDB( unsigned char* buffer, long dataLen, long fileID, long roam
 			return TL_OK;
 		}
 
-		otl_nocommit_stream otlStream;
+		long iotValidationMode;
+		long mobileNetworkID = GetSenderNetworkID(iotValidationMode);
+		if(mobileNetworkID < 0 ) {
+			log(LOG_ERROR, "Unable to determine sender network. File is not loaded.");
+			return TL_UNKNOWN_SENDER;
+		}
 		TAPValidator tapValidator(otlConnect, config);
-		TAPValidationResult validationRes = tapValidator.Validate(dataInterchange, roamingHubID);
+		TAPValidationResult validationRes = tapValidator.Validate(dataInterchange, mobileNetworkID, roamingHubID);
 		if (validationRes == VALIDATION_IMPOSSIBLE) {
 			log(LOG_ERROR, "Unable to validate TAP file. File is not loaded.");
 			return TL_TAP_NOT_VALIDATED;
@@ -993,14 +1092,16 @@ int LoadTAPFileToDB( unsigned char* buffer, long dataLen, long fileID, long roam
 			return TL_OK;
 		}
 		
+		otl_nocommit_stream otlStream;
 		if (dataInterchange->present == DataInterChange_PR_notification) {
 			// Processing Notification (empty TAP file, i.e. with no call records)
 			otlStream.open( 1 /*stream buffer size in logical rows*/, 
-				"insert into BILLING.TAP3_FILE (FILE_ID, ROAMINGHUB_ID, FILENAME, SENDER, RECIPIENT, SEQUENCE_NUMBER , CREATION_STAMP, CREATION_UTCOFF,"
+				"insert into BILLING.TAP3_FILE (FILE_ID, MOBILENETWORK_ID, ROAMINGHUB_ID, FILENAME, SENDER, RECIPIENT, SEQUENCE_NUMBER , CREATION_STAMP, CREATION_UTCOFF,"
 				"CUTOFF_STAMP, CUTOFF_UTCOFF, AVAILABLE_STAMP, AVAILABLE_UTCOFF, LOAD_TIME, NOTIFICATION, TAP_VERSION, TAP_RELEASE, "
 				"FILE_TYPE_INDICATOR, STATUS, CANCEL_RAP_FILE_SEQNUM, CANCEL_RAP_FILE_ID) "
 				"values ("
-				":hfileid /*long,in*/, :roamhubid /*long,in*/, :filename/*char[255],in*/, :sender/*char[20],in*/, :recipient/*char[20],in*/, :seq_num/*char[10],in*/,"
+				":hfileid /*long,in*/, :mobilenetworkid /*long,in*/, :roamhubid /*long,in*/, :filename/*char[255],in*/, "
+				":sender/*char[20],in*/, :recipient/*char[20],in*/, :seq_num/*char[10],in*/,"
 				"to_date(:creation_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :creation_utcoff /* char[10],in*/,"
 				"to_date(:cutoff_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :cutoff_utcoff /* char[10],in*/,"
 				"to_date(:available_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :available_utcoff /* char[10],in*/,"
@@ -1009,6 +1110,7 @@ int LoadTAPFileToDB( unsigned char* buffer, long dataLen, long fileID, long roam
 				":cancel_rap_file_seqnum /*char[10],in*/, :cancel_rap_file_id /*long,in*/)", otlConnect); 
 			otlStream
 				<< fileID
+				<< mobileNetworkID
 				<< roamingHubID
 				<< pShortName 
 				<< (char*) dataInterchange->choice.notification.sender->buf 
@@ -1042,21 +1144,23 @@ int LoadTAPFileToDB( unsigned char* buffer, long dataLen, long fileID, long roam
 
 		// Processing Transfer Batch
 		otlStream.open( 1 /*stream buffer size in logical rows*/, 
-			"insert into BILLING.TAP3_FILE (FILE_ID, ROAMINGHUB_ID, FILENAME, SENDER, RECIPIENT, SEQUENCE_NUMBER , CREATION_STAMP, CREATION_UTCOFF,\
-			CUTOFF_STAMP, CUTOFF_UTCOFF, AVAILABLE_STAMP, AVAILABLE_UTCOFF, LOCAL_CURRENCY, LOAD_TIME, EARLIEST_TIME, EARLIEST_UTCOFF, \
-			LATEST_TIME, LATEST_UTCOFF, EVENT_COUNT, TOTAL_CHARGE, TOTAL_TAX, TOTAL_DISCOUNT, NOTIFICATION, STATUS, TAP_VERSION, TAP_RELEASE, "
+			"insert into BILLING.TAP3_FILE (FILE_ID, MOBILENETWORK_ID, ROAMINGHUB_ID, FILENAME, SENDER, RECIPIENT, SEQUENCE_NUMBER , CREATION_STAMP, CREATION_UTCOFF,"
+			"CUTOFF_STAMP, CUTOFF_UTCOFF, AVAILABLE_STAMP, AVAILABLE_UTCOFF, LOCAL_CURRENCY, LOAD_TIME, EARLIEST_TIME, EARLIEST_UTCOFF, "
+			"LATEST_TIME, LATEST_UTCOFF, EVENT_COUNT, TOTAL_CHARGE, TOTAL_TAX, TOTAL_DISCOUNT, NOTIFICATION, STATUS, TAP_VERSION, TAP_RELEASE, "
 			"FILE_TYPE_INDICATOR, TAP_DECIMAL_PLACES, CANCEL_RAP_FILE_SEQNUM, CANCEL_RAP_FILE_ID) \
-			values (\
-			  :hfileid /*long,in*/, :roamhubid /*long,in*/, :filename/*char[255],in*/, :sender/*char[20],in*/, :recipient/*char[20],in*/, :seq_num/*char[10],in*/,\
-			  to_date(:creation_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :creation_utcoff /* char[10],in */,\
-			  to_date(:cutoff_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :cutoff_utcoff /* char[10],in */,\
-			  to_date(:available_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :available_utcoff /* char[10],in */,\
-			  :local_currency /* char[255],in */, sysdate, to_date(:earliest /*char[20],in*/, 'yyyymmddhh24miss'), :earliest_utcoff /* char[10],in */,\
-			  to_date(:latest /*char[20],in*/, 'yyyymmddhh24miss'), :latest_utcoff /* char[10],in */, :eventcount /* long,in */, :totalchr /* double,in */, \
-			  :total_tax /*double,in*/, :total_discount /*double,in*/, 0 /*notification*/, :status /*long,in*/, :tapVer /*long,in*/, :specif /*long,in*/, "
+			values ("
+			  ":hfileid /*long,in*/, :mobilenetworkid /*long,in*/, :roamhubid /*long,in*/, :filename/*char[255],in*/, "
+			  ":sender/*char[20],in*/, :recipient/*char[20],in*/, :seq_num/*char[10],in*/,"
+			  "to_date(:creation_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :creation_utcoff /* char[10],in */,"
+			  "to_date(:cutoff_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :cutoff_utcoff /* char[10],in */,"
+			  "to_date(:available_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :available_utcoff /* char[10],in */,"
+			  ":local_currency /* char[255],in */, sysdate, to_date(:earliest /*char[20],in*/, 'yyyymmddhh24miss'), :earliest_utcoff /* char[10],in */,"
+			  "to_date(:latest /*char[20],in*/, 'yyyymmddhh24miss'), :latest_utcoff /* char[10],in */, :eventcount /* long,in */, :totalchr /* double,in */, "
+			  ":total_tax /*double,in*/, :total_discount /*double,in*/, 0 /*notification*/, :status /*long,in*/, :tapVer /*long,in*/, :specif /*long,in*/, "
 			  ":filetype /*char[5],in*/, :tapDecimalPlaces /*long,in*/, :cancel_rap_file_seqnum /*char[10],in*/, :cancel_rap_file_id /*long,in*/) ", otlConnect);
 		otlStream 
 			<< fileID
+			<< mobileNetworkID
 			<< roamingHubID
 			<< pShortName 
 			<< ( dataInterchange->choice.transferBatch.batchControlInfo->sender ?
@@ -1142,71 +1246,7 @@ int LoadTAPFileToDB( unsigned char* buffer, long dataLen, long fileID, long roam
 			// Finish processing here. No call records are uploaded for Fatal Error TAP files
 			return TL_OK;
 		
-		long long eventID;
-		
-		// обработка звонковых записей
-		for(index=1; index <= dataInterchange->choice.transferBatch.callEventDetails->list.count; index++)
-		{
-			switch( dataInterchange->choice.transferBatch.callEventDetails->list.array[index-1]->present) {
-			case CallEventDetail_PR_mobileOriginatedCall:
-				if ((eventID = ProcessOriginatedCall(fileID, index, &dataInterchange->choice.transferBatch.callEventDetails->list.array[index - 1]->choice.mobileOriginatedCall)) < 0)
-				{
-					return (long) eventID;
-				}
-				
-				break;
-			case CallEventDetail_PR_mobileTerminatedCall:
-				if ((eventID = ProcessTerminatedCall(fileID, index, &dataInterchange->choice.transferBatch.callEventDetails->list.array[index - 1]->choice.mobileTerminatedCall)) < 0)
-				{
-					return (long)eventID;
-				}
-				
-				break;
-			case CallEventDetail_PR_supplServiceEvent:
-				// at this time we just ignore it
-				break;
-
-			case CallEventDetail_PR_gprsCall:
-				if ((eventID = ProcessGPRSCall(fileID, index, &dataInterchange->choice.transferBatch.callEventDetails->list.array[index - 1]->choice.gprsCall)) < 0)
-				{
-					return (long) eventID;
-				}
-				
-				break;
-			default:
-				if (!debugMode) {
-					log(pShortName, LOG_ERROR, string("No handler for call event detail type=") + to_string( static_cast<unsigned long long> (dataInterchange->choice.transferBatch.callEventDetails->list.array[index-1]->present)) +
-						string(". Call number=") + to_string(static_cast<unsigned long long> (index)));
-					return TL_NEWCOMPONENT;
-				}
-			}
-			
-		}
-
-		// TODO: disable, move to TAP Validator
-		// обработка Audit Control Info
-		if(!dataInterchange->choice.transferBatch.auditControlInfo->totalCharge || !dataInterchange->choice.transferBatch.auditControlInfo->callEventDetailsCount)
-		{
-			log(pShortName, LOG_ERROR, "Some mandatory structures are missing in Transfer Batch/Audit Control Information");
-			return TL_WRONGCODE;
-		}
-	
-		if(index-1 != *dataInterchange->choice.transferBatch.auditControlInfo->callEventDetailsCount)
-		{
-			log(pShortName, LOG_ERROR, "Calculated call event count (" + to_string(static_cast<unsigned long long> (index))+") differs from one in Audit Control Information ( " +
-				to_string( static_cast<unsigned long long> (*dataInterchange->choice.transferBatch.auditControlInfo->callEventDetailsCount)) +
-				").");
-			return TL_AUDITFAULT;
-		}
-
-		if(!debugMode && totalCharge != OctetStr2Int64(*dataInterchange->choice.transferBatch.auditControlInfo->totalCharge))
-		{
-			log(pShortName, LOG_ERROR, "Calculated total charge (" + to_string(static_cast<unsigned long double> (totalCharge / GetTAPPower())) + ") differs from Audit Control Information/TotalCharge (" +
-				to_string( static_cast<long double> (OctetStr2Int64(*dataInterchange->choice.transferBatch.auditControlInfo->totalCharge)/GetTAPPower())) + ").");
-			return TL_AUDITFAULT;
-		}
-
-		return TL_OK;
+		return LoadTAPEventsToDB(fileID, iotValidationMode);
 	}
 	catch (otl_exception &otlEx) {
 		otlConnect.rollback();
@@ -1882,15 +1922,6 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 //---------------------------------
 __declspec (dllexport) int __stdcall LoadFileToDB(char* pFilename, long fileID, long roamingHubID, char* pConfigFilename)
 {
-	/*ofstream params("params.txt");
-	if(params.is_open()) {
-		params << "filename: " << pFilename << endl;
-		params << "fileID: " << fileID << endl;
-		params << "roamingHubID: " << roamingHubID << endl;
-		params << "pConfigFilename: " << pConfigFilename << endl;
-	}
-	params.close();*/
-
 	string strFileID = to_string ((unsigned long long) fileID);
 	string strRoamHubID = to_string((unsigned long long) roamingHubID);
 	const char* pArgv[] = { "TAP3Loader.exe", pFilename, strFileID.c_str(), strRoamHubID.c_str(), pConfigFilename };
