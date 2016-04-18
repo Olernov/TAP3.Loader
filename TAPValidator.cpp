@@ -499,7 +499,6 @@ int TAPValidator::CreateBatchControlInfoRAPFile(string logMessage, int errorCode
 
 TAPValidationResult TAPValidator::FileSequenceNumberControl()
 {
-	TAPValidationResult res;
 	FileDuplicationCheckRes checkRes = IsFileDuplicated();
 	int createRapRes;
 	vector<ErrContextAsnItem> asnItems;
@@ -1239,11 +1238,22 @@ string TAPValidator::GetRapSequenceNum()
 	return m_rapSequenceNum;
 }
 
-long TAPValidator::ValidateCallIOT(long long eventID)
+
+long TAPValidator::ValidateCallIOT(long long eventID, CallTypeForValidation callType)
 {
 	otl_nocommit_stream otlStream;
-	otlStream.open(1, "call BILLING.TAP3_IOT.ValidateTapCall(:event_id /*bigint,in*/, :err_descr /*char[255],out*/) "
-		"into :res /*long,out*/", m_otlConnect);
+	switch (callType) {
+	case TELEPHONY_CALL:
+		otlStream.open(1, "call BILLING.TAP3_IOT.ValidateTapCall(:event_id /*bigint,in*/, :err_descr /*char[255],out*/) "
+			"into :res /*long,out*/", m_otlConnect);
+		break;
+	case GPRS_CALL:
+		otlStream.open(1, "call BILLING.TAP3_IOT.ValidateGPRSCall(:event_id /*bigint,in*/, :err_descr /*char[255],out*/) "
+			"into :res /*long,out*/", m_otlConnect);
+		break;
+	default:
+		return VALIDATION_IMPOSSIBLE;
+	}
 	otlStream << eventID;
 	long res;
 	string errorDescr;

@@ -990,7 +990,7 @@ int LoadTAPEventsToDB(long fileID, long iotValidationMode)
 				return (long) eventID;
 			}
 			if (iotValidationMode != IOT_NO_NEED) {
-				validationRes = callValidator.ValidateCallIOT(eventID);
+				validationRes = callValidator.ValidateCallIOT(eventID, TELEPHONY_CALL);
 				if (iotValidationMode == IOT_DROPOUT_ALERT || iotValidationMode == IOT_RAP_DROPOUT_ALERT) {
 					otlCallUpdater.open(1,
 						"update BILLING.TAP3_CALL SET IOT_VALIDATION_RES = :res /*long,in*/ WHERE EVENT_ID=:eventid /*bigint,in*/", otlConnect);
@@ -1008,7 +1008,7 @@ int LoadTAPEventsToDB(long fileID, long iotValidationMode)
 				return (long)eventID;
 			}
 			if (iotValidationMode != IOT_NO_NEED) {
-				validationRes = callValidator.ValidateCallIOT(eventID);
+				validationRes = callValidator.ValidateCallIOT(eventID, TELEPHONY_CALL);
 				if (iotValidationMode == IOT_DROPOUT_ALERT || iotValidationMode == IOT_RAP_DROPOUT_ALERT) {
 					otlCallUpdater.open(1,
 						"update BILLING.TAP3_CALL SET IOT_VALIDATION_RES = :res /*long,in*/ WHERE EVENT_ID=:eventid /*bigint,in*/", otlConnect);
@@ -1020,7 +1020,7 @@ int LoadTAPEventsToDB(long fileID, long iotValidationMode)
 			}
 			break;
 		case CallEventDetail_PR_supplServiceEvent:
-			// at this time we just ignore it
+			// just ignore it
 			break;
 
 		case CallEventDetail_PR_gprsCall:
@@ -1029,7 +1029,17 @@ int LoadTAPEventsToDB(long fileID, long iotValidationMode)
 				// ошибка загрузки
 				return (long) eventID;
 			}
-			// TODO: add validation	
+			if (iotValidationMode != IOT_NO_NEED) {
+				validationRes = callValidator.ValidateCallIOT(eventID, GPRS_CALL);
+				if (iotValidationMode == IOT_DROPOUT_ALERT || iotValidationMode == IOT_RAP_DROPOUT_ALERT) {
+					otlCallUpdater.open(1,
+						"update BILLING.TAP3_GPRSCALL SET IOT_VALIDATION_RES = :res /*long,in*/ WHERE EVENT_ID=:eventid /*bigint,in*/", otlConnect);
+					otlCallUpdater
+						<< (long) validationRes
+						<< eventID;
+					otlCallUpdater.close();
+				}
+			}
 			break;
 		default:
 			if (!debugMode) {

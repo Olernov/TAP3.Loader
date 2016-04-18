@@ -80,6 +80,12 @@ enum FileDuplicationCheckRes
 	DUPLICATION_CHECK_ERROR = -1
 };
 
+enum CallTypeForValidation
+{
+	TELEPHONY_CALL,
+	GPRS_CALL
+};
+
 class ErrContextAsnItem
 {
 public:
@@ -109,7 +115,7 @@ class TAPValidator
 public:
 	TAPValidator(otl_connect&, Config&);
 	TAPValidationResult Validate(DataInterChange*, long, long);
-	long ValidateCallIOT(long long eventID);
+	long ValidateCallIOT(long long eventID, CallTypeForValidation callType);
 	long GetRapFileID();
 	string GetRapSequenceNum();
 private:
