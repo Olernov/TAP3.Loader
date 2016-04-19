@@ -228,7 +228,7 @@ FileDuplicationCheckRes TAPValidator::IsFileDuplicated()
 {
 	otl_nocommit_stream otlStream;
 	otlStream.open(1, "call BILLING.TAP3.IsTAPFileDuplicated("
-		":sender /*char[20],in*/, :recipient /*char[20],in*/, :roam_hub_id /*long,in*/, :file_seqnum /*char[20],in*/, "
+		":sender /*long,in*/, :recipient /*char[20],in*/, :roam_hub_id /*long,in*/, :file_seqnum /*char[20],in*/, "
 		":file_type_indic /*char[20],in*/, :rap_file_seqnum /*char[20],in*/, :notif /*short,in*/, to_date(:avail_stamp /*char[20],in*/,'yyyymmddhh24miss'),"
 		":event_count /*long,in*/, :total_charge /*double,in*/ ) "
 		"into :res /*long,out*/", m_otlConnect);
@@ -237,7 +237,7 @@ FileDuplicationCheckRes TAPValidator::IsFileDuplicated()
 	if (m_transferBatch) {
 		double tapPower=pow( (double) 10, *m_transferBatch->accountingInfo->tapDecimalPlaces);
 		otlStream
-			<< m_transferBatch->batchControlInfo->sender->buf
+			<< m_mobileNetworkID
 			<< m_transferBatch->batchControlInfo->recipient->buf
 			<< m_roamingHubID
 			<< m_transferBatch->batchControlInfo->fileSequenceNumber->buf
@@ -250,7 +250,7 @@ FileDuplicationCheckRes TAPValidator::IsFileDuplicated()
 	}
 	else {
 		otlStream
-			<< m_notification->sender->buf
+			<< m_mobileNetworkID
 			<< m_notification->recipient->buf
 			<< m_roamingHubID
 			<< m_notification->fileSequenceNumber->buf
@@ -518,7 +518,6 @@ TAPValidationResult TAPValidator::FileSequenceNumberControl()
 		default:
 			return VALIDATION_IMPOSSIBLE;
 	}
-	// TODO: check sequence rollover and set date
 }
 
 TAPValidationResult TAPValidator::ValidateBatchControlInfo()
