@@ -15,9 +15,7 @@
 
 const char *pShortName;
 unsigned char* buffer = NULL;		// буфер для загрузки содержимого файла
-long TapFileID;				// ID TAP-файла в таблице TAP3_FILE
-uint64_t totalCharge=0;			// суммарное начисление (считается без деления на dblTAPPower)
-int totalCallDetailCount=0;
+long TapFileID;						// ID TAP-файла в таблице TAP3_FILE
 int debugMode = 0;
 DataInterChange* dataInterchange = NULL;
 ReturnBatch* returnBatch = NULL;
@@ -431,8 +429,8 @@ long ProcessChrInfo(long long eventID, ChargeInformation* chargeInformation, cha
 	for(int chdet_ind=0; chdet_ind<chargeInformation->chargeDetailList->list.count; chdet_ind++)
 	{
 		if(chargeInformation->chargeDetailList->list.array[chdet_ind]->charge)
-			if ( !strcmp( (const char*) chargeInformation->chargeDetailList->list.array[chdet_ind]->chargeType->buf, "00" ))
-				totalCharge += OctetStr2Int64(*chargeInformation->chargeDetailList->list.array[chdet_ind]->charge);
+			/*if ( !strcmp( (const char*) chargeInformation->chargeDetailList->list.array[chdet_ind]->chargeType->buf, "00" ))
+				totalCharge += OctetStr2Int64(*chargeInformation->chargeDetailList->list.array[chdet_ind]->charge);*/
 		
 		otlStream.open( 1 , "INSERT INTO BILLING.TAP3_CHARGEDETAIL (CHARGE_ID,CHR_TYPE,CHARGE,CHARGEABLE_UNITS,CHARGED_UNITS,DETAIL_TIME,DETAIL_UTCOFF) \
 							VALUES ( :hChargid /* long */, :hChr_type /* char[5] */, :hCharge /* double */, :hChrable /* bigint */, :hCharged /* bigint */, \
