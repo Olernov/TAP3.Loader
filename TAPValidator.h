@@ -43,6 +43,8 @@ enum TAPValidationErrors
 	ACCOUNTING_LOCAL_CURRENCY_MISSING = 32,
 	ACCOUNTING_CURRENCY_CONVERSION_MISSING = 34,
 	ACCOUNTING_TAP_DECIMAL_PLACES_MISSING = 35,
+	ACCOUNTING_EXCHARGE_RATE_LOWER = 200,
+	ACCOUNTING_EXCHARGE_RATE_HIGHER = 201,
 	
 	CURRENCY_CONVERSION_EXRATE_CODE_MISSING = 30,
 	CURRENCY_CONVERSION_NUM_OF_DEC_PLACES_MISSING = 31,
@@ -80,6 +82,17 @@ enum FileDuplicationCheckRes
 	DUPLICATION_CHECK_ERROR = -1
 };
 
+enum ExRateValidationRes
+{
+	EXRATE_VALID					= 0,
+	EXRATE_WRONG_CODE				= -100,
+	EXRATE_CURRENCY_NOT_FOUND		= -200,
+	EXRATE_CURRENCY_MISMATCH		= -205,
+	EXRATE_NOT_SET					= -207,
+	EXRATE_HIGHER					= -210,
+	EXRATE_LOWER					= -220
+};
+
 enum CallTypeForValidation
 {
 	TELEPHONY_CALL,
@@ -92,6 +105,17 @@ public:
 	ErrContextAsnItem(asn_TYPE_descriptor_t* asnType, long itemOccurence) : m_asnType(asnType), m_itemOccurence(itemOccurence) {}
 	asn_TYPE_descriptor_t* m_asnType;
 	long m_itemOccurence;
+};
+
+struct ExchangeRate 
+{
+	ExchangeRateCode_t code;
+	double rate;
+
+	ExchangeRate(ExchangeRateCode_t code, double rate) :
+		code(code),
+		rate(rate)
+	{}
 };
 
 class RAPFile
@@ -139,6 +163,9 @@ private:
 	bool BatchContainsPositiveCharges();
 	long long ChargeInfoListTotalCharge(ChargeInformationList* chargeInfoList);
 	long long BatchTotalCharge();
+	ExRateValidationRes ValidateChrInfoExRates(ChargeInformationList* pChargeInfoList, LocalTimeStamp_t* pCallTimestamp,
+		const map<ExchangeRateCode_t, double>& exchangeRates, string tapLocalCurrency);
+	ExRateValidationRes ValidateExchangeRates(const map<ExchangeRateCode_t, double>& exchangeRates, string tapLocalCurrency);
 	
 	int CreateTransferBatchRAPFile(string logMessage, int errorCode);
 	int CreateNotificationRAPFile(string logMessage, int errorCode, const vector<ErrContextAsnItem>& asnItems);

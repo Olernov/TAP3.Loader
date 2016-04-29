@@ -3,6 +3,7 @@
 
 #include <math.h>
 #include <set>
+#include <map>
 #include "OTL_Header.h"
 #include "TAP_Constants.h"
 #include "DataInterchange.h"
@@ -554,7 +555,7 @@ TAPValidationResult TAPValidator::ValidateBatchControlInfo()
 	try {
 		fileSeqNum = stoi((char*)m_transferBatch->batchControlInfo->fileSequenceNumber->buf, NULL);
 	}
-	catch(const std::invalid_argument& ia) {
+	catch(const std::invalid_argument&) {
 		// wrong file sequence number given
 		vector<ErrContextAsnItem> asnItems;
 		asnItems.push_back(ErrContextAsnItem(&asn_DEF_FileSequenceNumber, 0));
@@ -651,6 +652,88 @@ int TAPValidator::CreateAccountingInfoRAPFile(string logMessage, int errorCode, 
 }
 
 
+ExRateValidationRes TAPValidator::ValidateChrInfoExRates(ChargeInformationList* pChargeInfoList, LocalTimeStamp_t* pCallTimestamp,
+		const map<ExchangeRateCode_t, double>& exchangeRates, string tapLocalCurrency)
+{
+	long long eventCharge = ChargeInfoListTotalCharge(pChargeInfoList);
+	if(eventCharge > 0) {
+		// validate exchange rate
+		for(int chrinfo_index = 0; chrinfo_index < pChargeInfoList->list.count; chrinfo_index++) {
+			if (pChargeInfoList->list.array[chrinfo_index]->exchangeRateCode) {
+				map<ExchangeRateCode_t, double>::const_iterator it =
+					exchangeRates.find(*pChargeInfoList->list.array[chrinfo_index]->exchangeRateCode);
+				if (it != exchangeRates.end()) {
+					otl_nocommit_stream otlStream;
+					otlStream.open(1, "CALL BILLING.TAP3.ValidateExchangeRate(:mobnetworkid /*long,in*/, "
+						":currency /*char[10],in*/, to_date(:call_time /*char[20],in*/,'yyyymmddhh24miss'), :ex_rate /*double,in*/) "
+						"into :res /*long,out*/", m_otlConnect);
+					otlStream
+						<< m_mobileNetworkID
+						<< tapLocalCurrency
+						<< pCallTimestamp->buf
+						<< it->second;
+					long validationRes;
+					otlStream >> validationRes;
+					otlStream.close();
+					if (validationRes != EXRATE_VALID) {
+						// break processing and return error
+						return (ExRateValidationRes)validationRes;
+					}
+				}
+				else {
+					return EXRATE_WRONG_CODE;
+				}
+			}
+		}
+	}
+	return EXRATE_VALID;
+}
+
+ExRateValidationRes TAPValidator::ValidateExchangeRates(const map<ExchangeRateCode_t, double>& exchangeRates, string tapLocalCurrency)
+{
+	long long eventCharge = 0;
+	ChargeInformationList* pChargeInfoList;
+	otl_nocommit_stream otlStream;
+	for (int call_index = 0; call_index < m_transferBatch->callEventDetails->list.count; call_index++) {
+		if(m_transferBatch->callEventDetails->list.array[call_index]->present == CallEventDetail_PR_mobileOriginatedCall) {
+			MobileOriginatedCall* mCall = &m_transferBatch->callEventDetails->list.array[call_index]->choice.mobileOriginatedCall;
+			for (int bs_used_index = 0; bs_used_index < mCall->basicServiceUsedList->list.count; bs_used_index++) {
+				pChargeInfoList = mCall->basicServiceUsedList->list.array[bs_used_index]->chargeInformationList;
+				ExRateValidationRes validationRes = ValidateChrInfoExRates(pChargeInfoList, 
+					mCall->basicCallInformation->callEventStartTimeStamp->localTimeStamp, exchangeRates, tapLocalCurrency);
+				if (validationRes != EXRATE_VALID) {
+					// break processing and return error
+					return (ExRateValidationRes)validationRes;
+				}
+			}
+		}
+		if(m_transferBatch->callEventDetails->list.array[call_index]->present == CallEventDetail_PR_mobileTerminatedCall) {
+			MobileTerminatedCall* mCall = &m_transferBatch->callEventDetails->list.array[call_index]->choice.mobileTerminatedCall;
+			for (int bs_used_index = 0; bs_used_index < mCall->basicServiceUsedList->list.count; bs_used_index++) {
+				pChargeInfoList = mCall->basicServiceUsedList->list.array[bs_used_index]->chargeInformationList;
+				ExRateValidationRes validationRes = ValidateChrInfoExRates(pChargeInfoList, 
+					mCall->basicCallInformation->callEventStartTimeStamp->localTimeStamp, exchangeRates, tapLocalCurrency);
+				if (validationRes != EXRATE_VALID) {
+					// break processing and return error
+					return (ExRateValidationRes)validationRes;
+				}
+			}
+		}
+		if (m_transferBatch->callEventDetails->list.array[call_index]->present == CallEventDetail_PR_gprsCall) {
+			GprsCall* mCall = &m_transferBatch->callEventDetails->list.array[call_index]->choice.gprsCall;
+			pChargeInfoList = mCall->gprsServiceUsed->chargeInformationList;
+			ExRateValidationRes validationRes = ValidateChrInfoExRates(pChargeInfoList,
+				mCall->gprsBasicCallInformation->callEventStartTimeStamp->localTimeStamp, exchangeRates, tapLocalCurrency);
+			if (validationRes != EXRATE_VALID) {
+				// break processing and return error
+				return (ExRateValidationRes)validationRes;
+			}
+		}
+	}
+	return EXRATE_VALID;
+}
+
+
 TAPValidationResult TAPValidator::ValidateAccountingInfo()
 {
 	if (!m_transferBatch->accountingInfo->localCurrency) {
@@ -683,7 +766,7 @@ TAPValidationResult TAPValidator::ValidateAccountingInfo()
 	}
 	// Validating currency conversion table
 	if (m_transferBatch->accountingInfo->currencyConversionInfo) {
-		set<ExchangeRateCode_t> exchangeRateCodes;
+		map<ExchangeRateCode_t, double> exchangeRates;
 		for (int i = 0; i < m_transferBatch->accountingInfo->currencyConversionInfo->list.count; i++) {
 			vector<ErrContextAsnItem> asnItems;
 			asnItems.push_back(ErrContextAsnItem(&asn_DEF_CurrencyConversionList, i + 1));
@@ -706,18 +789,32 @@ TAPValidationResult TAPValidator::ValidateAccountingInfo()
 				return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
 			}
 			// check exchange rate code duplication
-			if (exchangeRateCodes.find(*m_transferBatch->accountingInfo->currencyConversionInfo->list.array[i]->exchangeRateCode) !=
-					exchangeRateCodes.end()) {
+			if (exchangeRates.find(*m_transferBatch->accountingInfo->currencyConversionInfo->list.array[i]->exchangeRateCode) !=
+					exchangeRates.end()) {
 				int createRapRes = CreateAccountingInfoRAPFile(
 					"More than one occurrence of group with same Exchange Rate Code within group Currency Conversion",
 					CURRENCY_CONVERSION_EXRATE_CODE_DUPLICATION, asnItems);
 				return ( createRapRes >= 0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE );
 			}
 			else {
-				exchangeRateCodes.insert(*m_transferBatch->accountingInfo->currencyConversionInfo->list.array[i]->exchangeRateCode);
+				exchangeRates.insert( pair<ExchangeRateCode_t, double> 
+					(*m_transferBatch->accountingInfo->currencyConversionInfo->list.array[i]->exchangeRateCode,
+					*m_transferBatch->accountingInfo->currencyConversionInfo->list.array[i]->exchangeRate /
+					pow((double)10, *m_transferBatch->accountingInfo->currencyConversionInfo->list.array[i]->numberOfDecimalPlaces)));
 			}
-			// check exchange rate code
-			// TODO: add checks ?
+			ExRateValidationRes validationRes = ValidateExchangeRates(exchangeRates, 
+				(char*) m_transferBatch->accountingInfo->localCurrency->buf);
+			if(validationRes == EXRATE_HIGHER || validationRes == EXRATE_LOWER) {
+				int createRapRes = CreateAccountingInfoRAPFile(
+					validationRes == EXRATE_HIGHER ? 
+						"Exchange Rate higher than expected and applied to one or more Charges" :
+						"Exchange Rate less than expected and applied to one or more Charges",
+					validationRes == EXRATE_HIGHER ? 
+						ACCOUNTING_EXCHARGE_RATE_HIGHER :
+						ACCOUNTING_EXCHARGE_RATE_LOWER, 
+					asnItems);
+				return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
+			}
 		}
 	}
 
@@ -765,7 +862,7 @@ TAPValidationResult TAPValidator::ValidateAccountingInfo()
 				try {
 					taxRate = stol((char*) m_transferBatch->accountingInfo->taxation->list.array[i]->taxRate->buf, NULL);
 				}
-				catch (const std::invalid_argument& ia) {
+				catch (const std::invalid_argument&) {
 					// wrong tax rate given
 					int createRapRes = CreateAccountingInfoRAPFile("Tax Rate is not a number (syntax error) at element " + to_string((long long) ( i + 1 )),
 						TAX_RATE_SYNTAX_ERROR, asnItems);
@@ -1190,7 +1287,7 @@ TAPValidationResult TAPValidator::ValidateNotification()
 	try {
 		fileSeqNum = stoi((char*) m_notification->fileSequenceNumber->buf, NULL);
 	}
-	catch(const std::invalid_argument& ia) {
+	catch(const std::invalid_argument&) {
 		// wrong file sequence number given
 		vector<ErrContextAsnItem> asnItems;
 		asnItems.push_back(ErrContextAsnItem(&asn_DEF_FileSequenceNumber, 0));
