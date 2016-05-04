@@ -734,6 +734,88 @@ ExRateValidationRes TAPValidator::ValidateExchangeRates(const map<ExchangeRateCo
 }
 
 
+ExRateValidationRes TAPValidator::ValidateChrInfoExRates(ChargeInformationList* pChargeInfoList, LocalTimeStamp_t* pCallTimestamp,
+		const map<ExchangeRateCode_t, double>& exchangeRates, string tapLocalCurrency)
+{
+	long long eventCharge = ChargeInfoListTotalCharge(pChargeInfoList);
+	if(eventCharge > 0) {
+		// validate exchange rate
+		for(int chrinfo_index = 0; chrinfo_index < pChargeInfoList->list.count; chrinfo_index++) {
+			if (pChargeInfoList->list.array[chrinfo_index]->exchangeRateCode) {
+				map<ExchangeRateCode_t, double>::const_iterator it =
+					exchangeRates.find(*pChargeInfoList->list.array[chrinfo_index]->exchangeRateCode);
+				if (it != exchangeRates.end()) {
+					otl_nocommit_stream otlStream;
+					otlStream.open(1, "CALL BILLING.TAP3.ValidateExchangeRate(:mobnetworkid /*long,in*/, "
+						":currency /*char[10],in*/, to_date(:call_time /*char[20],in*/,'yyyymmddhh24miss'), :ex_rate /*double,in*/) "
+						"into :res /*long,out*/", m_otlConnect);
+					otlStream
+						<< m_mobileNetworkID
+						<< tapLocalCurrency
+						<< pCallTimestamp->buf
+						<< it->second;
+					long validationRes;
+					otlStream >> validationRes;
+					otlStream.close();
+					if (validationRes != EXRATE_VALID) {
+						// break processing and return error
+						return (ExRateValidationRes)validationRes;
+					}
+				}
+				else {
+					return EXRATE_WRONG_CODE;
+				}
+			}
+		}
+	}
+	return EXRATE_VALID;
+}
+
+ExRateValidationRes TAPValidator::ValidateExchangeRates(const map<ExchangeRateCode_t, double>& exchangeRates, string tapLocalCurrency)
+{
+	long long eventCharge = 0;
+	ChargeInformationList* pChargeInfoList;
+	otl_nocommit_stream otlStream;
+	for (int call_index = 0; call_index < m_transferBatch->callEventDetails->list.count; call_index++) {
+		if(m_transferBatch->callEventDetails->list.array[call_index]->present == CallEventDetail_PR_mobileOriginatedCall) {
+			MobileOriginatedCall* mCall = &m_transferBatch->callEventDetails->list.array[call_index]->choice.mobileOriginatedCall;
+			for (int bs_used_index = 0; bs_used_index < mCall->basicServiceUsedList->list.count; bs_used_index++) {
+				pChargeInfoList = mCall->basicServiceUsedList->list.array[bs_used_index]->chargeInformationList;
+				ExRateValidationRes validationRes = ValidateChrInfoExRates(pChargeInfoList, 
+					mCall->basicCallInformation->callEventStartTimeStamp->localTimeStamp, exchangeRates, tapLocalCurrency);
+				if (validationRes != EXRATE_VALID) {
+					// break processing and return error
+					return (ExRateValidationRes)validationRes;
+				}
+			}
+		}
+		if(m_transferBatch->callEventDetails->list.array[call_index]->present == CallEventDetail_PR_mobileTerminatedCall) {
+			MobileTerminatedCall* mCall = &m_transferBatch->callEventDetails->list.array[call_index]->choice.mobileTerminatedCall;
+			for (int bs_used_index = 0; bs_used_index < mCall->basicServiceUsedList->list.count; bs_used_index++) {
+				pChargeInfoList = mCall->basicServiceUsedList->list.array[bs_used_index]->chargeInformationList;
+				ExRateValidationRes validationRes = ValidateChrInfoExRates(pChargeInfoList, 
+					mCall->basicCallInformation->callEventStartTimeStamp->localTimeStamp, exchangeRates, tapLocalCurrency);
+				if (validationRes != EXRATE_VALID) {
+					// break processing and return error
+					return (ExRateValidationRes)validationRes;
+				}
+			}
+		}
+		if (m_transferBatch->callEventDetails->list.array[call_index]->present == CallEventDetail_PR_gprsCall) {
+			GprsCall* mCall = &m_transferBatch->callEventDetails->list.array[call_index]->choice.gprsCall;
+			pChargeInfoList = mCall->gprsServiceUsed->chargeInformationList;
+			ExRateValidationRes validationRes = ValidateChrInfoExRates(pChargeInfoList,
+				mCall->gprsBasicCallInformation->callEventStartTimeStamp->localTimeStamp, exchangeRates, tapLocalCurrency);
+			if (validationRes != EXRATE_VALID) {
+				// break processing and return error
+				return (ExRateValidationRes)validationRes;
+			}
+		}
+	}
+	return EXRATE_VALID;
+}
+
+
 TAPValidationResult TAPValidator::ValidateAccountingInfo()
 {
 	if (!m_transferBatch->accountingInfo->localCurrency) {
@@ -838,8 +920,9 @@ TAPValidationResult TAPValidator::ValidateAccountingInfo()
 					}
 					log(LOG_ERROR, "Could not validate exchange rates, error code " + to_string((long long) validationRes) + " (" + logMessage + ")");
 					return VALIDATION_IMPOSSIBLE;
-				}
-
+			}
+			// check exchange rate code
+			// TODO: add checks ?
 		}
 	}
 

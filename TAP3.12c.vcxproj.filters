@@ -1245,6 +1245,12 @@
     <ClInclude Include="..\TAP3_Writer\gpshare.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="CallValidator.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="RAPFile.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="stdafx.cpp">
@@ -2448,6 +2454,12 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\TAP3_Writer\ncftpput.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="CallValidator.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="RAPFile.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

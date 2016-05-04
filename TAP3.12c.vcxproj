@@ -561,8 +561,10 @@
     <ClInclude Include="..\RAP_ASN_Structures\TotalSevereReturnValue.h" />
     <ClInclude Include="..\RAP_ASN_Structures\TransferBatchError.h" />
     <ClInclude Include="..\TAP3_Writer\gpshare.h" />
+    <ClInclude Include="CallValidator.h" />
     <ClInclude Include="otlv4.h" />
     <ClInclude Include="OTL_Header.h" />
+    <ClInclude Include="RAPFile.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="TAPValidator.h" />
     <ClInclude Include="targetver.h" />
@@ -966,6 +968,8 @@
     <ClCompile Include="..\RAP_ASN_Structures\TransferBatchError.c" />
     <ClCompile Include="..\TAP3_Writer\gpshare.c" />
     <ClCompile Include="..\TAP3_Writer\ncftpput.c" />
+    <ClCompile Include="CallValidator.cpp" />
+    <ClCompile Include="RAPFile.cpp" />
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug RAP|Win32'">Create</PrecompiledHeader>

@@ -93,15 +93,9 @@ enum ExRateValidationRes
 	EXRATE_LOWER					= -220
 };
 
-enum CallTypeForValidation
-{
-	TELEPHONY_CALL,
-	GPRS_CALL
-};
 
-class ErrContextAsnItem
+struct ErrContextAsnItem
 {
-public:
 	ErrContextAsnItem(asn_TYPE_descriptor_t* asnType, long itemOccurence) : m_asnType(asnType), m_itemOccurence(itemOccurence) {}
 	asn_TYPE_descriptor_t* m_asnType;
 	long m_itemOccurence;
@@ -118,28 +112,11 @@ struct ExchangeRate
 	{}
 };
 
-class RAPFile
-{
-public:
-	RAPFile(otl_connect&, Config&);
-	int CreateRAPFile(ReturnBatch* returnBatch, ReturnDetail* returnDetail, long roamingHubID, string sender, string recipient,
-		string tapAvailableStamp, string fileTypeIndicator, long& rapFileID, string& rapFilename);
-private:
-	otl_connect& m_otlConnect;
-	Config& m_config;
-	
-	int OctetString_fromInt64(OCTET_STRING& octetStr, long long value);
-	bool UploadFileToFtp(string filename, string fullFileName, FtpSetting ftpSetting);
-	int EncodeAndUpload(ReturnBatch* returnBatch, string filename, string roamingHubName);
-};
-
-
 class TAPValidator
 {
 public:
 	TAPValidator(otl_connect&, Config&);
 	TAPValidationResult Validate(DataInterChange*, long, long);
-	long ValidateCallIOT(long long eventID, CallTypeForValidation callType);
 	long GetRapFileID();
 	string GetRapSequenceNum();
 private:
@@ -173,6 +150,8 @@ private:
 	int CreateAccountingInfoRAPFile(string logMessage, int errorCode, const vector<ErrContextAsnItem>& asnItems);
 	int CreateNetworkInfoRAPFile(string logMessage, int errorCode, const vector<ErrContextAsnItem>& asnItems);
 	int CreateAuditControlInfoRAPFile(string logMessage, int errorCode, const vector<ErrContextAsnItem>& asnItems);
+
+	int CreateSevereRAPFile(string logMessage, int errorCode, const vector<ErrContextAsnItem>& asnItems);
 
 	TAPValidationResult ValidateBatchControlInfo();
 	TAPValidationResult ValidateNetworkInfo();

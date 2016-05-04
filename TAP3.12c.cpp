@@ -11,6 +11,7 @@
 #include "TAP_Constants.h"
 #include "ConfigContainer.h"
 #include "TAPValidator.h"
+#include "CallValidator.h"
 
 
 const char *pShortName;
@@ -976,10 +977,9 @@ int LoadTAPEventsToDB(long fileID, long iotValidationMode)
 	long long eventID;
 	long validationRes;
 	otl_nocommit_stream otlCallUpdater;
-	// обработка звонковых записей
+	CallValidator callValidator(otlConnect, dataInterchange->choice.transferBatch, config);
 	for(int index=1; index <= dataInterchange->choice.transferBatch.callEventDetails->list.count; index++)
 	{
-		TAPValidator callValidator(otlConnect, config);
 		switch( dataInterchange->choice.transferBatch.callEventDetails->list.array[index-1]->present) {
 		case CallEventDetail_PR_mobileOriginatedCall:
 			if ((eventID = ProcessOriginatedCall(fileID, index,
@@ -988,7 +988,7 @@ int LoadTAPEventsToDB(long fileID, long iotValidationMode)
 				return (long) eventID;
 			}
 			if (iotValidationMode != IOT_NO_NEED) {
-				validationRes = callValidator.ValidateCallIOT(eventID, TELEPHONY_CALL);
+				validationRes = callValidator.ValidateCallIOT(eventID, TELEPHONY_CALL, (iotValidationMode >= IOT_RAP_DROPOUT_ALERT));
 				if (iotValidationMode == IOT_DROPOUT_ALERT || iotValidationMode == IOT_RAP_DROPOUT_ALERT) {
 					otlCallUpdater.open(1,
 						"update BILLING.TAP3_CALL SET IOT_VALIDATION_RES = :res /*long,in*/ WHERE EVENT_ID=:eventid /*bigint,in*/", otlConnect);
@@ -1006,7 +1006,7 @@ int LoadTAPEventsToDB(long fileID, long iotValidationMode)
 				return (long)eventID;
 			}
 			if (iotValidationMode != IOT_NO_NEED) {
-				validationRes = callValidator.ValidateCallIOT(eventID, TELEPHONY_CALL);
+				validationRes = callValidator.ValidateCallIOT(eventID, TELEPHONY_CALL, (iotValidationMode >= IOT_RAP_DROPOUT_ALERT));
 				if (iotValidationMode == IOT_DROPOUT_ALERT || iotValidationMode == IOT_RAP_DROPOUT_ALERT) {
 					otlCallUpdater.open(1,
 						"update BILLING.TAP3_CALL SET IOT_VALIDATION_RES = :res /*long,in*/ WHERE EVENT_ID=:eventid /*bigint,in*/", otlConnect);
@@ -1028,7 +1028,7 @@ int LoadTAPEventsToDB(long fileID, long iotValidationMode)
 				return (long) eventID;
 			}
 			if (iotValidationMode != IOT_NO_NEED) {
-				validationRes = callValidator.ValidateCallIOT(eventID, GPRS_CALL);
+				validationRes = callValidator.ValidateCallIOT(eventID, GPRS_CALL, (iotValidationMode >= IOT_RAP_DROPOUT_ALERT));
 				if (iotValidationMode == IOT_DROPOUT_ALERT || iotValidationMode == IOT_RAP_DROPOUT_ALERT) {
 					otlCallUpdater.open(1,
 						"update BILLING.TAP3_GPRSCALL SET IOT_VALIDATION_RES = :res /*long,in*/ WHERE EVENT_ID=:eventid /*bigint,in*/", otlConnect);
