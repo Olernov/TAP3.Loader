@@ -6,6 +6,7 @@
 #include "ConfigContainer.h"
 #include "CallValidator.h"
 #include "TAPValidator.h"
+#include "RAPFile.h"
 
 using namespace std;
 
@@ -18,99 +19,128 @@ extern int LoadReturnBatchToDB(ReturnBatch* returnBatch, long fileID, long roami
 extern int write_out(const void *buffer, size_t size, void *app_key);
 extern "C" int ncftp_main(int argc, char **argv, char* result);
 
-CallValidator::CallValidator(otl_connect& otlConnect, const TransferBatch& transferBatch, Config& config) :
+CallValidator::CallValidator(otl_connect& otlConnect, const TransferBatch* transferBatch, Config& config) :
 	m_otlConnect(otlConnect),
 	m_transferBatch(transferBatch),
-	m_config(config)
+	m_config(config),
+	m_returnBatch(NULL),
+	m_totalSevereReturn(0)
 {}
 
 
-//int CallValidator::CreateSevereRAPFile(string logMessage, int errorCode, const vector<ErrContextAsnItem>& asnItems)
-//{
-//	log(LOG_ERROR, "Validating call event details: " + logMessage + ". Creating RAP file");
-//	ReturnDetail* returnDetail = (ReturnDetail*) calloc(1, sizeof(ReturnDetail));
-//	returnDetail->present = ReturnDetail_PR_severeReturn;
-//	OCTET_STRING_fromBuf(&returnDetail->choice.severeReturn.fileSequenceNumber, (const char*) m_transferBatch->batchControlInfo->fileSequenceNumber->buf, 
-//		m_transferBatch->batchControlInfo->fileSequenceNumber->size);
-//	returnDetail->choice.severeReturn.callEventDetail.
-//	
-//	//Copy AccountingInfo fields to Return Batch structure
-//	returnDetail->choice.severeReturn.accountingInfoError->accountingInfo.currencyConversionInfo = 
-//		m_transferBatch->accountingInfo->currencyConversionInfo;
-//	returnDetail->choice.severeReturn.accountingInfoError->accountingInfo.discounting = 
-//		m_transferBatch->accountingInfo->discounting;
-//	returnDetail->choice.severeReturn.accountingInfoError->accountingInfo.localCurrency = 
-//		m_transferBatch->accountingInfo->localCurrency;
-//	returnDetail->choice.severeReturn.accountingInfoError->accountingInfo.tapCurrency = 
-//		m_transferBatch->accountingInfo->tapCurrency;
-//	returnDetail->choice.severeReturn.accountingInfoError->accountingInfo.tapDecimalPlaces = 
-//		m_transferBatch->accountingInfo->tapDecimalPlaces;
-//	returnDetail->choice.severeReturn.accountingInfoError->accountingInfo.taxation = 
-//		m_transferBatch->accountingInfo->taxation;
-//		
-//	ErrorDetail* errorDetail = (ErrorDetail*) calloc(1, sizeof(ErrorDetail));
-//	errorDetail->errorCode = errorCode;
-//
-//	// Fill Error Context List
-//	int itemLevel = 1;
-//	errorDetail->errorContext = (ErrorContextList*) calloc(1, sizeof(ErrorContextList));
-//	ErrorContext* errorContext1level = (ErrorContext*) calloc(1, sizeof(ErrorContext));
-//	errorContext1level->pathItemId = asn_DEF_TransferBatch.tags[0] >> 2; // 2 rightmost bits is TAG class at ASN1 compiler, remove it  
-//	errorContext1level->itemLevel = itemLevel++;
-//	ASN_SEQUENCE_ADD(errorDetail->errorContext, errorContext1level);
-//
-//	ErrorContext* errorContext2level = (ErrorContext*) calloc(1, sizeof(ErrorContext));
-//	errorContext2level->pathItemId = asn_DEF_AccountingInfo.tags[0] >> 2; // 2 rightmost bits is TAG class at ASN1 compiler, remove it  
-//	errorContext2level->itemLevel = itemLevel++;
-//	ASN_SEQUENCE_ADD(errorDetail->errorContext, errorContext2level);
-//	
-//	for (auto it = asnItems.cbegin() ; it != asnItems.cend(); it++)
-//	{
-//		ErrorContext* errorContext = (ErrorContext*) calloc(1, sizeof(ErrorContext));
-//		errorContext->pathItemId = (*it).m_asnType->tags[0] >> 2; // 2 rightmost bits is TAG class at ASN1 compiler, remove it  
-//		errorContext->itemLevel = itemLevel++;
-//		if ((*it).m_itemOccurence > 0) {
-//			errorContext->itemOccurrence = (ItemOccurrence_t*) calloc(1, sizeof(ItemOccurrence_t));
-//			*errorContext->itemOccurrence = (*it).m_itemOccurence;
-//		}
-//		ASN_SEQUENCE_ADD(errorDetail->errorContext, errorContext);
-//	}
-//	ASN_SEQUENCE_ADD(&returnDetail->choice.severeReturn.accountingInfoError->errorDetail, errorDetail);
-//
-//	ReturnBatch* returnBatch = (ReturnBatch*) calloc(1, sizeof(ReturnBatch));
-//	RAPFile rapFile(m_otlConnect, m_config);
-//	
-//	assert(m_transferBatch->batchControlInfo->sender);
-//	assert(m_transferBatch->batchControlInfo->recipient);
-//	assert(m_transferBatch->batchControlInfo->fileAvailableTimeStamp);
-//	int loadRes = rapFile.CreateRAPFile(returnBatch, returnDetail, m_roamingHubID, (char*)m_transferBatch->batchControlInfo->sender->buf,
-//		(char*) m_transferBatch->batchControlInfo->recipient->buf, (char*) m_transferBatch->batchControlInfo->fileAvailableTimeStamp->localTimeStamp->buf,
-//		(m_transferBatch->batchControlInfo->fileTypeIndicator ? (char*) m_transferBatch->batchControlInfo->fileTypeIndicator->buf : ""),
-//		m_rapFileID, m_rapSequenceNum);
-//	
-//	// Clear previously copied pointers to avoid ASN_STRUCT_FREE errors
-//	returnDetail->choice.severeReturn.accountingInfoError->accountingInfo.currencyConversionInfo = NULL;
-//	returnDetail->choice.severeReturn.accountingInfoError->accountingInfo.discounting = NULL;
-//	returnDetail->choice.severeReturn.accountingInfoError->accountingInfo.localCurrency = NULL;
-//	returnDetail->choice.severeReturn.accountingInfoError->accountingInfo.tapCurrency = NULL;
-//	returnDetail->choice.severeReturn.accountingInfoError->accountingInfo.tapDecimalPlaces = NULL;
-//	returnDetail->choice.severeReturn.accountingInfoError->accountingInfo.taxation = NULL;
-//	ASN_STRUCT_FREE(asn_DEF_ReturnBatch, returnBatch);
-//
-//	return loadRes;
-//}
+void CallValidator::CreateReturnBatch()
+{
+	m_returnBatch = (ReturnBatch*) calloc(1, sizeof(ReturnBatch));
+}
+
+// Calculates call total charge multiplied by TAP power based on TAP decimal places
+long CallValidator::CallTotalCharge(int callIndex)
+{
+	ChargeInformationList* chargeInfoList;
+	switch (m_transferBatch->callEventDetails->list.array[callIndex]->present) {
+	case CallEventDetail_PR_mobileOriginatedCall:
+		chargeInfoList = m_transferBatch->callEventDetails->list.array[callIndex]->
+			choice.mobileOriginatedCall.basicServiceUsedList->list.array[0]->chargeInformationList;
+		break;
+	case CallEventDetail_PR_mobileTerminatedCall:
+		chargeInfoList = m_transferBatch->callEventDetails->list.array[callIndex]->
+			choice.mobileTerminatedCall.basicServiceUsedList->list.array[0]->chargeInformationList;
+		break;
+	case CallEventDetail_PR_gprsCall:
+		chargeInfoList = m_transferBatch->callEventDetails->list.array[callIndex]->
+			choice.gprsCall.gprsServiceUsed->chargeInformationList;
+	}
+	long totalCharge = 0;
+	for (int chr_index = 0; chr_index < chargeInfoList->list.count; chr_index++)
+		for (int chr_det_index = 0; chr_det_index < chargeInfoList->list.array[chr_index]->chargeDetailList->list.count; chr_det_index++) {
+			if (string((char*) chargeInfoList->list.array[chr_index]->chargeDetailList->list.array[chr_det_index]->
+					chargeType->buf) == "00")
+				totalCharge += OctetStr2Int64(*chargeInfoList->list.array[chr_index]->chargeDetailList->
+					list.array[chr_det_index]->charge);
+	}
+	return totalCharge;
+}
 
 
-long CallValidator::ValidateCallIOT(long long eventID, CallTypeForValidation callType, bool needRAP)
+void CallValidator::AddErrorContext(ErrorDetail* errorDetail, int ctxLevel, int pathItemId, int itemOccurrence)
+{
+	ErrorContext* errorContext = (ErrorContext*) calloc(1, sizeof(ErrorContext));
+	errorContext->pathItemId = pathItemId >> 2; // 2 rightmost bits is TAG class at ASN1 compiler, remove it  
+	errorContext->itemLevel = ctxLevel;
+	if (itemOccurrence > 0) {
+		errorContext->itemOccurrence = (ItemOccurrence_t*)calloc(1, sizeof(ItemOccurrence_t));
+		*errorContext->itemOccurrence = itemOccurrence;
+	}
+	ASN_SEQUENCE_ADD(errorDetail->errorContext, errorContext);
+}
+
+
+void CallValidator::AddCallToReturnBatch(int callIndex, int errorCode)
+{
+	ReturnDetail* returnDetail = (ReturnDetail*) calloc(1, sizeof(ReturnDetail));
+	returnDetail->present = ReturnDetail_PR_severeReturn;
+	OCTET_STRING_fromBuf(&returnDetail->choice.severeReturn.fileSequenceNumber, 
+		(const char*) m_transferBatch->batchControlInfo->fileSequenceNumber->buf, 
+		m_transferBatch->batchControlInfo->fileSequenceNumber->size);
+	returnDetail->choice.severeReturn.callEventDetail = *m_transferBatch->callEventDetails->list.array[callIndex];
+	
+	ErrorDetail* errorDetail = (ErrorDetail*) calloc(1, sizeof(ErrorDetail));
+	errorDetail->errorCode = errorCode;
+	errorDetail->errorContext = (ErrorContextList*) calloc(1, sizeof(ErrorContextList));
+
+	AddErrorContext(errorDetail, 1, asn_DEF_TransferBatch.tags[0], 0);
+	AddErrorContext(errorDetail, 2, asn_DEF_CallEventDetailList.tags[0], callIndex + 1);
+	switch (m_transferBatch->callEventDetails->list.array[callIndex]->present) {
+	case CallEventDetail_PR_mobileOriginatedCall:
+		AddErrorContext(errorDetail, 3, asn_DEF_MobileOriginatedCall.tags[0], 1);
+		break;
+	case CallEventDetail_PR_mobileTerminatedCall:
+		AddErrorContext(errorDetail, 3, asn_DEF_MobileTerminatedCall.tags[0], 1);
+		break;
+	case CallEventDetail_PR_gprsCall:
+		AddErrorContext(errorDetail, 3, asn_DEF_GprsCall.tags[0], 1);
+		break;
+	}
+		
+	switch (m_transferBatch->callEventDetails->list.array[callIndex]->present) {
+	case CallEventDetail_PR_mobileOriginatedCall:
+	case CallEventDetail_PR_mobileTerminatedCall:
+		AddErrorContext(errorDetail, 4, asn_DEF_BasicServiceUsedList.tags[0], 1 /*TODO: think about correct item occurrence*/);
+		AddErrorContext(errorDetail, 5, asn_DEF_BasicServiceUsed.tags[0], 0);
+		AddErrorContext(errorDetail, 6, asn_DEF_ChargeInformationList.tags[0], 1 /*TODO: think about correct item occurrence*/);
+		AddErrorContext(errorDetail, 7, asn_DEF_ChargeInformation.tags[0], 0);
+		AddErrorContext(errorDetail, 8, asn_DEF_ChargeDetailList.tags[0], 1 /*TODO: think about correct item occurrence*/);
+		AddErrorContext(errorDetail, 9, asn_DEF_ChargeDetail.tags[0], 0);
+		AddErrorContext(errorDetail, 10, asn_DEF_Charge.tags[0], 0);
+		break;
+	case CallEventDetail_PR_gprsCall:
+		AddErrorContext(errorDetail, 4, asn_DEF_GprsServiceUsed.tags[0], 1);
+		AddErrorContext(errorDetail, 5, asn_DEF_ChargeInformationList.tags[0], 1 /*TODO: think about correct item occurrence*/);
+		AddErrorContext(errorDetail, 6, asn_DEF_ChargeInformation.tags[0], 0);
+		AddErrorContext(errorDetail, 7, asn_DEF_ChargeDetailList.tags[0], 1 /*TODO: think about correct item occurrence*/);
+		AddErrorContext(errorDetail, 8, asn_DEF_ChargeDetail.tags[0], 0);
+		AddErrorContext(errorDetail, 9, asn_DEF_Charge.tags[0], 0);
+		break;
+	}
+	ASN_SEQUENCE_ADD(&returnDetail->choice.severeReturn.errorDetail, errorDetail);
+	m_returnDetails.push_back(returnDetail);
+
+	m_totalSevereReturn += CallTotalCharge(callIndex);
+}
+
+
+long CallValidator::ValidateCallIOT(long long eventID, CallTypeForValidation callType, int callIndex, long iotValidationMode)
 {
 	otl_nocommit_stream otlStream;
 	switch (callType) {
 	case TELEPHONY_CALL:
-		otlStream.open(1, "call BILLING.TAP3_IOT.ValidateTapCall(:event_id /*bigint,in*/, :err_descr /*char[255],out*/) "
+		otlStream.open(1, "call BILLING.TAP3_IOT.ValidateTapCall(:event_id /*bigint,in*/, :err_descr /*char[255],out*/,"
+			":iot_date /*char[50],out*/, :exp_charge /*double,out*/, :calculation /*char[200],out*/) "
 			"into :res /*long,out*/", m_otlConnect);
 		break;
 	case GPRS_CALL:
-		otlStream.open(1, "call BILLING.TAP3_IOT.ValidateGPRSCall(:event_id /*bigint,in*/, :err_descr /*char[255],out*/) "
+		otlStream.open(1, "call BILLING.TAP3_IOT.ValidateGPRSCall(:event_id /*bigint,in*/, :err_descr /*char[255],out*/,"
+			":iot_date /*char[50],out*/, :exp_charge /*double,out*/, :calculation /*char[200],out*/) "
 			"into :res /*long,out*/", m_otlConnect);
 		break;
 	default:
@@ -118,9 +148,13 @@ long CallValidator::ValidateCallIOT(long long eventID, CallTypeForValidation cal
 	}
 	otlStream << eventID;
 	long res;
-	string errorDescr;
+	string errorDescr, iotDate, calculation;
+	double expectedCharge;
 	otlStream
 		>> errorDescr
+		>> iotDate
+		>> expectedCharge
+		>> calculation
 		>> res;
 
 	otlStream.close();
@@ -134,9 +168,46 @@ long CallValidator::ValidateCallIOT(long long eventID, CallTypeForValidation cal
 			<< res
 			<< errorDescr;
 		otlStream.close();
-		if(needRAP) {
-			// update TAP3_Call set cancel_rap_seq_num = ...
+		if(iotValidationMode >= IOT_RAP_DROPOUT_ALERT) {
+			// TODO: update TAP3_Call set cancel_rap_seq_num = ...
+			if (!m_returnBatch)
+				CreateReturnBatch();
+			AddCallToReturnBatch(callIndex, CHARGE_NOT_IN_ROAMING_AGREEMENT);
 		}
 	}
 	return res;
+}
+
+
+bool CallValidator::GotReturnBatch()
+{
+	return (m_returnBatch != NULL);
+}
+
+
+int CallValidator::WriteRAPFile(long roamingHubID)
+{
+	RAPFile rapFile(m_otlConnect, m_config);
+	
+	assert(m_transferBatch->batchControlInfo->sender);
+	assert(m_transferBatch->batchControlInfo->recipient);
+	assert(m_transferBatch->batchControlInfo->fileAvailableTimeStamp);
+	assert(m_returnBatch);
+
+	long rapFileID;
+	string rapSequenceNum;
+	int loadRes = rapFile.CreateRAPFile(
+		m_returnBatch, 
+		&m_returnDetails[0], 
+		m_returnDetails.size(), 
+		m_totalSevereReturn,
+		roamingHubID, 
+		(char*)m_transferBatch->batchControlInfo->sender->buf,
+		(char*) m_transferBatch->batchControlInfo->recipient->buf, 
+		(char*) m_transferBatch->batchControlInfo->fileAvailableTimeStamp->localTimeStamp->buf,
+		(m_transferBatch->batchControlInfo->fileTypeIndicator ? 
+			(char*) m_transferBatch->batchControlInfo->fileTypeIndicator->buf : ""),
+		rapFileID, 
+		rapSequenceNum);
+	return loadRes;
 }

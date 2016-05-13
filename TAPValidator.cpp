@@ -11,6 +11,7 @@
 #include "ReturnBatch.h"
 #include "ConfigContainer.h"
 #include "TAPValidator.h"
+#include "RAPFile.h"
 
 using namespace std;
 
@@ -23,188 +24,6 @@ extern int LoadReturnBatchToDB(ReturnBatch* returnBatch, long fileID, long roami
 extern int write_out(const void *buffer, size_t size, void *app_key);
 extern "C" int ncftp_main(int argc, char **argv, char* result);
 
-
-RAPFile::RAPFile(otl_connect& dbConnect, Config& config) 
-	: m_otlConnect(dbConnect), m_config(config)
-{
-}
-
-
-int RAPFile::OctetString_fromInt64(OCTET_STRING& octetStr, long long value)
-{
-	unsigned char buf[8];
-	int i;
-	// fill buffer with value, most significant bytes first, less significant - last
-	for (i = 7; i >= 0; i--) {
-		buf[i] = value & 0xFF;
-		value >>= 8;
-		if (value == 0) break;
-	}
-	if (i == 0 && value > 0)
-		throw "8-byte integer overflow";
-
-	if (buf[i] >= 0x80) {
-		// it will be treated as negative value, so add one more byte
-		if (i == 0)
-			throw "8-byte integer overflow";
-		buf[--i] = 0;
-	}
-
-	OCTET_STRING_fromBuf(&octetStr, (const char*) ( buf + i ), 8 - i);
-
-	return 8 - i;
-}
-
-
-bool RAPFile::UploadFileToFtp(string filename, string fullFileName, FtpSetting ftpSetting)
-{
-	try {
-		if (ftpSetting.ftpPort.length() == 0)
-			ftpSetting.ftpPort = "21";	// use default ftp port
-		int ncftp_argc = 11;
-		const char* pszArguments[] = { "ncftpput", "-u", ftpSetting.ftpUsername.c_str(), "-p", 
-			ftpSetting.ftpPassword.c_str(), "-P", ftpSetting.ftpPort.c_str(), ftpSetting.ftpServer.c_str(), 
-			ftpSetting.ftpDirectory.c_str(), fullFileName.c_str(), NULL };
-		char szFtpResult[4096];
-		int ftpResult = ncftp_main(ncftp_argc, (char**) pszArguments, szFtpResult);
-		if (ftpResult != 0) {
-			log(filename, LOG_ERROR, "Error while uploading file " + filename + " on FTP server " + ftpSetting.ftpServer + ":");
-			log(filename, LOG_ERROR, szFtpResult);
-			return false;
-		}
-		log(filename, LOG_INFO, "Successful upload to FTP server " + ftpSetting.ftpServer);
-		return true;
-	}
-	catch (...) {
-		log(filename, LOG_ERROR, "Exception while uploading " + filename + " to FTP server " 
-			+ ftpSetting.ftpServer + ". Uploading failed.");
-		return false;
-	}
-}
-
-
-int RAPFile::EncodeAndUpload(ReturnBatch* returnBatch, string filename, string roamingHubName)
-{
-	string fullFileName;
-#ifdef WIN32
-	fullFileName = (m_config.GetOutputDirectory().empty() ? "." : m_config.GetOutputDirectory()) + "\\" + filename;
-#else
-	fullFileName = (m_config.GetOutputDirectory().empty() ? "." : m_config.GetOutputDirectory()) + "/" + filename;
-#endif
-
-	FILE *fTapFile = fopen(fullFileName.c_str(), "wb");
-	if (!fTapFile) {
-		log(filename, LOG_ERROR, string("Unable to open file ") + fullFileName + " for writing.");
-		return TL_FILEERROR;
-	}
-	asn_enc_rval_t encodeRes = der_encode(&asn_DEF_ReturnBatch, returnBatch, write_out, fTapFile);
-
-	fclose(fTapFile);
-
-	if (encodeRes.encoded == -1) {
-		log(filename, LOG_ERROR, string("Error while encoding ASN file. Error code ") + 
-			string(encodeRes.failed_type ? encodeRes.failed_type->name : "unknown"));
-		return TL_DECODEERROR;
-	}
-
-	log(filename, LOG_INFO, "RAP file successfully created for roaming hub " + roamingHubName);
-
-	// Upload file to FTP-server
-	FtpSetting ftpSetting = m_config.GetFTPSetting(roamingHubName);
-	if (!ftpSetting.ftpServer.empty()) {
-		if (!UploadFileToFtp(filename, fullFileName, ftpSetting)) {
-			return TL_FILEERROR;
-		}
-	}
-	else
-		log(filename, LOG_INFO, "FTP server is not set in cfg-file for roaming hub " + roamingHubName + ". No uploading done.");
-
-	return TL_OK;
-}
-
-
-int RAPFile::CreateRAPFile(ReturnBatch* returnBatch, ReturnDetail* returnDetail, long roamingHubID, string tapSender, string tapRecipient, 
-	string tapAvailableStamp, string fileTypeIndicator, long& rapFileID, string& rapSequenceNum)
-{
-	otl_nocommit_stream otlStream;
-	otlStream.open(1, "call BILLING.TAP3.CreateRAPFileByTAPLoader(:pRecipientTAPCode /*char[10],in*/, :pRoamingHubID /*long,in*/, "
-		":pTestData /*long,in*/, to_date(:pDate /*char[30],in*/, 'yyyymmddhh24miss'), :pRAPFilename /*char[50],out*/, "
-		":pRAPSequenceNum /*char[10],out*/, :pMobileNetworkID /*long,out*/, :pRoamingHubName /*char[100],out*/,"
-		":pTimestamp /*char[20],out*/, :pUTCOffset /*char[10],out*/, :pTAPVersion /*long,out*/, :pTAPRelease /*long,out*/, "
-		":pRAPVersion /*long,out*/, :pRAPRelease /*long,out*/, :pTapDecimalPlaces /*long,out*/)"
-		" into :fileid /*long,out*/" , m_otlConnect);
-	otlStream
-		<< tapSender
-		<< roamingHubID
-		<< (long) (fileTypeIndicator.size()>0 ? 1 : 0)
-		<< tapAvailableStamp;
-	
-	string filename, roamingHubName, timeStamp, utcOffset;
-	long  mobileNetworkID, tapVersion, tapRelease, rapVersion, rapRelease, tapDecimalPlaces;
-	otlStream
-		>> filename
-		>> rapSequenceNum
-		>> mobileNetworkID
-		>> roamingHubName
-		>> timeStamp
-		>> utcOffset
-		>> tapVersion
-		>> tapRelease
-		>> rapVersion
-		>> rapRelease
-		>> tapDecimalPlaces
-		>> rapFileID;
-	
-	if (rapFileID < 0) {
-		log(LOG_ERROR, "TAP3.CreateRAPFileByTAPLoader returned error " + to_string((long long) rapFileID));
-		return TL_ORACLEERROR;
-	}
-
-	// sender and recipient switch their places
-	OCTET_STRING_fromBuf(&returnBatch->rapBatchControlInfoRap.sender, tapSender.c_str(), tapSender.size());
-	OCTET_STRING_fromBuf(&returnBatch->rapBatchControlInfoRap.recipient, tapRecipient.c_str(), tapRecipient.size());
-
-	OCTET_STRING_fromBuf(&returnBatch->rapBatchControlInfoRap.rapFileSequenceNumber, rapSequenceNum.c_str(), rapSequenceNum.size());
-	returnBatch->rapBatchControlInfoRap.rapFileCreationTimeStamp.localTimeStamp =
-		OCTET_STRING_new_fromBuf (&asn_DEF_LocalTimeStamp, timeStamp.c_str(), timeStamp.size());
-	returnBatch->rapBatchControlInfoRap.rapFileCreationTimeStamp.utcTimeOffset =
-		OCTET_STRING_new_fromBuf (&asn_DEF_UtcTimeOffset, utcOffset.c_str(), utcOffset.size());
-	returnBatch->rapBatchControlInfoRap.rapFileAvailableTimeStamp.localTimeStamp =
-		OCTET_STRING_new_fromBuf (&asn_DEF_LocalTimeStamp, timeStamp.c_str(), timeStamp.size());
-	returnBatch->rapBatchControlInfoRap.rapFileAvailableTimeStamp.utcTimeOffset =
-		OCTET_STRING_new_fromBuf (&asn_DEF_UtcTimeOffset, utcOffset.c_str(), utcOffset.size());
-
-	returnBatch->rapBatchControlInfoRap.tapDecimalPlaces = (TapDecimalPlaces_t*) calloc(1, sizeof(TapDecimalPlaces_t));
-	*returnBatch->rapBatchControlInfoRap.tapDecimalPlaces = tapDecimalPlaces;
-	
-	returnBatch->rapBatchControlInfoRap.rapSpecificationVersionNumber = rapVersion;
-	returnBatch->rapBatchControlInfoRap.rapReleaseVersionNumber = rapRelease;
-	returnBatch->rapBatchControlInfoRap.specificationVersionNumber = (SpecificationVersionNumber_t*) calloc(1, sizeof(SpecificationVersionNumber_t));
-	*returnBatch->rapBatchControlInfoRap.specificationVersionNumber = tapVersion;
-	returnBatch->rapBatchControlInfoRap.releaseVersionNumber = (ReleaseVersionNumber_t*) calloc(1, sizeof(ReleaseVersionNumber_t));
-	*returnBatch->rapBatchControlInfoRap.releaseVersionNumber = tapRelease;
-			
-	if (!fileTypeIndicator.empty())
-		returnBatch->rapBatchControlInfoRap.fileTypeIndicator = 
-			OCTET_STRING_new_fromBuf(&asn_DEF_FileTypeIndicator, fileTypeIndicator.c_str(), fileTypeIndicator.size());
-		
-// TODO: Operator specific info is mandatory for IOT errors (TD.52 RAP implementation handbook)
-// Fill it for Severe errors
-			
-	ASN_SEQUENCE_ADD(&returnBatch->returnDetails, returnDetail);
-
-	OctetString_fromInt64(returnBatch->rapAuditControlInfo.totalSevereReturnValue, (long long) 0);
-	returnBatch->rapAuditControlInfo.returnDetailsCount = 1; // For Fatal errors 
-
-	int loadResult = LoadReturnBatchToDB(returnBatch, rapFileID, roamingHubID, filename, OUTFILE_CREATED_AND_SENT);
-	if (loadResult >= 0)
-		loadResult = EncodeAndUpload(returnBatch, filename, roamingHubName);
-	
-	otlStream.close();
-	return loadResult;
-}
-
-//-----------------------------------------------------------
 
 TAPValidator::TAPValidator(otl_connect& dbConnect, Config& config) 
 	: m_otlConnect(dbConnect), m_config(config), m_rapFileID(0)
@@ -417,29 +236,7 @@ int TAPValidator::CreateBatchControlInfoRAPFile(string logMessage, int errorCode
 		m_transferBatch->batchControlInfo->fileSequenceNumber->size);
 	returnDetail->choice.fatalReturn.batchControlError = (BatchControlError*) calloc(1, sizeof(BatchControlError));
 	
-	//Copy batchControlInfo fields to Return Batch structure
-	returnDetail->choice.fatalReturn.batchControlError->batchControlInfo.sender =
-		m_transferBatch->batchControlInfo->sender;
-	returnDetail->choice.fatalReturn.batchControlError->batchControlInfo.recipient = 
-		m_transferBatch->batchControlInfo->recipient;
-	returnDetail->choice.fatalReturn.batchControlError->batchControlInfo.fileAvailableTimeStamp = 
-		m_transferBatch->batchControlInfo->fileAvailableTimeStamp;
-	returnDetail->choice.fatalReturn.batchControlError->batchControlInfo.fileCreationTimeStamp = 
-		m_transferBatch->batchControlInfo->fileCreationTimeStamp;
-	returnDetail->choice.fatalReturn.batchControlError->batchControlInfo.transferCutOffTimeStamp = 
-		m_transferBatch->batchControlInfo->transferCutOffTimeStamp;
-	returnDetail->choice.fatalReturn.batchControlError->batchControlInfo.fileSequenceNumber = 
-		m_transferBatch->batchControlInfo->fileSequenceNumber;
-	returnDetail->choice.fatalReturn.batchControlError->batchControlInfo.fileTypeIndicator = 
-		m_transferBatch->batchControlInfo->fileTypeIndicator;
-	returnDetail->choice.fatalReturn.batchControlError->batchControlInfo.operatorSpecInformation = 
-		m_transferBatch->batchControlInfo->operatorSpecInformation;
-	returnDetail->choice.fatalReturn.batchControlError->batchControlInfo.rapFileSequenceNumber = 
-		m_transferBatch->batchControlInfo->rapFileSequenceNumber;
-	returnDetail->choice.fatalReturn.batchControlError->batchControlInfo.releaseVersionNumber = 
-		m_transferBatch->batchControlInfo->releaseVersionNumber;
-	returnDetail->choice.fatalReturn.batchControlError->batchControlInfo.specificationVersionNumber = 
-		m_transferBatch->batchControlInfo->specificationVersionNumber;
+	returnDetail->choice.fatalReturn.batchControlError->batchControlInfo = *m_transferBatch->batchControlInfo;
 	
 	ErrorDetail* errorDetail = (ErrorDetail*) calloc(1, sizeof(ErrorDetail));
 	errorDetail->errorCode = errorCode;
@@ -476,9 +273,12 @@ int TAPValidator::CreateBatchControlInfoRAPFile(string logMessage, int errorCode
 	assert(m_transferBatch->batchControlInfo->sender);
 	assert(m_transferBatch->batchControlInfo->recipient);
 	assert(m_transferBatch->batchControlInfo->fileAvailableTimeStamp);
-	int loadRes = rapFile.CreateRAPFile(returnBatch, returnDetail, m_roamingHubID, (char*)m_transferBatch->batchControlInfo->sender->buf,
-		(char*) m_transferBatch->batchControlInfo->recipient->buf, (char*) m_transferBatch->batchControlInfo->fileAvailableTimeStamp->localTimeStamp->buf,
-		(m_transferBatch->batchControlInfo->fileTypeIndicator ? (char*) m_transferBatch->batchControlInfo->fileTypeIndicator->buf : ""),
+	int loadRes = rapFile.CreateRAPFile(returnBatch, &returnDetail, 1, 0, m_roamingHubID, 
+		(char*)m_transferBatch->batchControlInfo->sender->buf,
+		(char*) m_transferBatch->batchControlInfo->recipient->buf, 
+		(char*) m_transferBatch->batchControlInfo->fileAvailableTimeStamp->localTimeStamp->buf,
+		(m_transferBatch->batchControlInfo->fileTypeIndicator ? 
+			(char*) m_transferBatch->batchControlInfo->fileTypeIndicator->buf : ""),
 		m_rapFileID, m_rapSequenceNum);
 	
 	// Clear previously copied pointers to avoid ASN_STRUCT_FREE errors
@@ -585,19 +385,7 @@ int TAPValidator::CreateAccountingInfoRAPFile(string logMessage, int errorCode, 
 		m_transferBatch->batchControlInfo->fileSequenceNumber->size);
 	returnDetail->choice.fatalReturn.accountingInfoError = (AccountingInfoError*) calloc(1, sizeof(AccountingInfoError));
 	
-	//Copy AccountingInfo fields to Return Batch structure
-	returnDetail->choice.fatalReturn.accountingInfoError->accountingInfo.currencyConversionInfo = 
-		m_transferBatch->accountingInfo->currencyConversionInfo;
-	returnDetail->choice.fatalReturn.accountingInfoError->accountingInfo.discounting = 
-		m_transferBatch->accountingInfo->discounting;
-	returnDetail->choice.fatalReturn.accountingInfoError->accountingInfo.localCurrency = 
-		m_transferBatch->accountingInfo->localCurrency;
-	returnDetail->choice.fatalReturn.accountingInfoError->accountingInfo.tapCurrency = 
-		m_transferBatch->accountingInfo->tapCurrency;
-	returnDetail->choice.fatalReturn.accountingInfoError->accountingInfo.tapDecimalPlaces = 
-		m_transferBatch->accountingInfo->tapDecimalPlaces;
-	returnDetail->choice.fatalReturn.accountingInfoError->accountingInfo.taxation = 
-		m_transferBatch->accountingInfo->taxation;
+	returnDetail->choice.fatalReturn.accountingInfoError->accountingInfo = *m_transferBatch->accountingInfo;
 		
 	ErrorDetail* errorDetail = (ErrorDetail*) calloc(1, sizeof(ErrorDetail));
 	errorDetail->errorCode = errorCode;
@@ -634,9 +422,12 @@ int TAPValidator::CreateAccountingInfoRAPFile(string logMessage, int errorCode, 
 	assert(m_transferBatch->batchControlInfo->sender);
 	assert(m_transferBatch->batchControlInfo->recipient);
 	assert(m_transferBatch->batchControlInfo->fileAvailableTimeStamp);
-	int loadRes = rapFile.CreateRAPFile(returnBatch, returnDetail, m_roamingHubID, (char*)m_transferBatch->batchControlInfo->sender->buf,
-		(char*) m_transferBatch->batchControlInfo->recipient->buf, (char*) m_transferBatch->batchControlInfo->fileAvailableTimeStamp->localTimeStamp->buf,
-		(m_transferBatch->batchControlInfo->fileTypeIndicator ? (char*) m_transferBatch->batchControlInfo->fileTypeIndicator->buf : ""),
+	int loadRes = rapFile.CreateRAPFile(returnBatch, &returnDetail, 1, 0, m_roamingHubID, 
+		(char*)m_transferBatch->batchControlInfo->sender->buf,
+		(char*) m_transferBatch->batchControlInfo->recipient->buf, 
+		(char*) m_transferBatch->batchControlInfo->fileAvailableTimeStamp->localTimeStamp->buf,
+		(m_transferBatch->batchControlInfo->fileTypeIndicator ? 
+			(char*) m_transferBatch->batchControlInfo->fileTypeIndicator->buf : ""),
 		m_rapFileID, m_rapSequenceNum);
 	
 	// Clear previously copied pointers to avoid ASN_STRUCT_FREE errors
@@ -649,88 +440,6 @@ int TAPValidator::CreateAccountingInfoRAPFile(string logMessage, int errorCode, 
 	ASN_STRUCT_FREE(asn_DEF_ReturnBatch, returnBatch);
 
 	return loadRes;
-}
-
-
-ExRateValidationRes TAPValidator::ValidateChrInfoExRates(ChargeInformationList* pChargeInfoList, LocalTimeStamp_t* pCallTimestamp,
-		const map<ExchangeRateCode_t, double>& exchangeRates, string tapLocalCurrency)
-{
-	long long eventCharge = ChargeInfoListTotalCharge(pChargeInfoList);
-	if(eventCharge > 0) {
-		// validate exchange rate
-		for(int chrinfo_index = 0; chrinfo_index < pChargeInfoList->list.count; chrinfo_index++) {
-			if (pChargeInfoList->list.array[chrinfo_index]->exchangeRateCode) {
-				map<ExchangeRateCode_t, double>::const_iterator it =
-					exchangeRates.find(*pChargeInfoList->list.array[chrinfo_index]->exchangeRateCode);
-				if (it != exchangeRates.end()) {
-					otl_nocommit_stream otlStream;
-					otlStream.open(1, "CALL BILLING.TAP3.ValidateExchangeRate(:mobnetworkid /*long,in*/, "
-						":currency /*char[10],in*/, to_date(:call_time /*char[20],in*/,'yyyymmddhh24miss'), :ex_rate /*double,in*/) "
-						"into :res /*long,out*/", m_otlConnect);
-					otlStream
-						<< m_mobileNetworkID
-						<< tapLocalCurrency
-						<< pCallTimestamp->buf
-						<< it->second;
-					long validationRes;
-					otlStream >> validationRes;
-					otlStream.close();
-					if (validationRes != EXRATE_VALID) {
-						// break processing and return error
-						return (ExRateValidationRes)validationRes;
-					}
-				}
-				else {
-					return EXRATE_WRONG_CODE;
-				}
-			}
-		}
-	}
-	return EXRATE_VALID;
-}
-
-ExRateValidationRes TAPValidator::ValidateExchangeRates(const map<ExchangeRateCode_t, double>& exchangeRates, string tapLocalCurrency)
-{
-	long long eventCharge = 0;
-	ChargeInformationList* pChargeInfoList;
-	otl_nocommit_stream otlStream;
-	for (int call_index = 0; call_index < m_transferBatch->callEventDetails->list.count; call_index++) {
-		if(m_transferBatch->callEventDetails->list.array[call_index]->present == CallEventDetail_PR_mobileOriginatedCall) {
-			MobileOriginatedCall* mCall = &m_transferBatch->callEventDetails->list.array[call_index]->choice.mobileOriginatedCall;
-			for (int bs_used_index = 0; bs_used_index < mCall->basicServiceUsedList->list.count; bs_used_index++) {
-				pChargeInfoList = mCall->basicServiceUsedList->list.array[bs_used_index]->chargeInformationList;
-				ExRateValidationRes validationRes = ValidateChrInfoExRates(pChargeInfoList, 
-					mCall->basicCallInformation->callEventStartTimeStamp->localTimeStamp, exchangeRates, tapLocalCurrency);
-				if (validationRes != EXRATE_VALID) {
-					// break processing and return error
-					return (ExRateValidationRes)validationRes;
-				}
-			}
-		}
-		if(m_transferBatch->callEventDetails->list.array[call_index]->present == CallEventDetail_PR_mobileTerminatedCall) {
-			MobileTerminatedCall* mCall = &m_transferBatch->callEventDetails->list.array[call_index]->choice.mobileTerminatedCall;
-			for (int bs_used_index = 0; bs_used_index < mCall->basicServiceUsedList->list.count; bs_used_index++) {
-				pChargeInfoList = mCall->basicServiceUsedList->list.array[bs_used_index]->chargeInformationList;
-				ExRateValidationRes validationRes = ValidateChrInfoExRates(pChargeInfoList, 
-					mCall->basicCallInformation->callEventStartTimeStamp->localTimeStamp, exchangeRates, tapLocalCurrency);
-				if (validationRes != EXRATE_VALID) {
-					// break processing and return error
-					return (ExRateValidationRes)validationRes;
-				}
-			}
-		}
-		if (m_transferBatch->callEventDetails->list.array[call_index]->present == CallEventDetail_PR_gprsCall) {
-			GprsCall* mCall = &m_transferBatch->callEventDetails->list.array[call_index]->choice.gprsCall;
-			pChargeInfoList = mCall->gprsServiceUsed->chargeInformationList;
-			ExRateValidationRes validationRes = ValidateChrInfoExRates(pChargeInfoList,
-				mCall->gprsBasicCallInformation->callEventStartTimeStamp->localTimeStamp, exchangeRates, tapLocalCurrency);
-			if (validationRes != EXRATE_VALID) {
-				// break processing and return error
-				return (ExRateValidationRes)validationRes;
-			}
-		}
-	}
-	return EXRATE_VALID;
 }
 
 
@@ -894,12 +603,12 @@ TAPValidationResult TAPValidator::ValidateAccountingInfo()
 					case EXRATE_LOWER:
 						createRapRes = CreateAccountingInfoRAPFile(
 							validationRes == EXRATE_HIGHER ?
-							"Exchange Rate higher than expected and applied to one or more Charges" :
-							"Exchange Rate less than expected and applied to one or more Charges",
+								"Exchange Rate higher than expected and applied to one or more Charges" :
+								"Exchange Rate less than expected and applied to one or more Charges",
 							validationRes == EXRATE_HIGHER ?
-						ACCOUNTING_EXCHARGE_RATE_HIGHER :
-														ACCOUNTING_EXCHARGE_RATE_LOWER,
-														asnItems);
+								ACCOUNTING_EXCHARGE_RATE_HIGHER :
+								ACCOUNTING_EXCHARGE_RATE_LOWER,
+							asnItems);
 						return (createRapRes >= 0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
 					case EXRATE_WRONG_CODE:
 						logMessage = "Wrong exchange rate code given";
@@ -1004,10 +713,7 @@ int TAPValidator::CreateNetworkInfoRAPFile(string logMessage, int errorCode, con
 	returnDetail->choice.fatalReturn.networkInfoError = (NetworkInfoError*) calloc(1, sizeof(NetworkInfoError));
 	
 	//Copy NetworkInfo fields to Return Batch structure
-	returnDetail->choice.fatalReturn.networkInfoError->networkInfo.recEntityInfo = 
-		m_transferBatch->networkInfo->recEntityInfo;
-	returnDetail->choice.fatalReturn.networkInfoError->networkInfo.utcTimeOffsetInfo = 
-		m_transferBatch->networkInfo->utcTimeOffsetInfo;
+	returnDetail->choice.fatalReturn.networkInfoError->networkInfo = *m_transferBatch->networkInfo;
 		
 	ErrorDetail* errorDetail = (ErrorDetail*) calloc(1, sizeof(ErrorDetail));
 	errorDetail->errorCode = errorCode;
@@ -1043,9 +749,12 @@ int TAPValidator::CreateNetworkInfoRAPFile(string logMessage, int errorCode, con
 	assert(m_transferBatch->batchControlInfo->sender);
 	assert(m_transferBatch->batchControlInfo->recipient);
 	assert(m_transferBatch->batchControlInfo->fileAvailableTimeStamp);
-	int loadRes = rapFile.CreateRAPFile(returnBatch, returnDetail, m_roamingHubID, (char*)m_transferBatch->batchControlInfo->sender->buf,
-		(char*) m_transferBatch->batchControlInfo->recipient->buf, (char*) m_transferBatch->batchControlInfo->fileAvailableTimeStamp->localTimeStamp->buf,
-		(m_transferBatch->batchControlInfo->fileTypeIndicator ? (char*) m_transferBatch->batchControlInfo->fileTypeIndicator->buf : ""),
+	int loadRes = rapFile.CreateRAPFile(returnBatch, &returnDetail, 1, 0, m_roamingHubID, 
+		(char*)m_transferBatch->batchControlInfo->sender->buf,
+		(char*) m_transferBatch->batchControlInfo->recipient->buf, 
+		(char*) m_transferBatch->batchControlInfo->fileAvailableTimeStamp->localTimeStamp->buf,
+		(m_transferBatch->batchControlInfo->fileTypeIndicator ? 
+			(char*) m_transferBatch->batchControlInfo->fileTypeIndicator->buf : ""),
 		m_rapFileID, m_rapSequenceNum);
 	
 	// Clear previously copied pointers to avoid ASN_STRUCT_FREE errors
@@ -1122,29 +831,8 @@ int TAPValidator::CreateAuditControlInfoRAPFile(string logMessage, int errorCode
 	returnDetail->choice.fatalReturn.auditControlInfoError = (AuditControlInfoError*) calloc(1, sizeof(AuditControlInfoError));
 	
 	//Copy auditControlInfo fields to Return Batch structure
-	returnDetail->choice.fatalReturn.auditControlInfoError->auditControlInfo.callEventDetailsCount = 
-		m_transferBatch->auditControlInfo->callEventDetailsCount;
-	returnDetail->choice.fatalReturn.auditControlInfoError->auditControlInfo.earliestCallTimeStamp = 
-		m_transferBatch->auditControlInfo->earliestCallTimeStamp;
-	returnDetail->choice.fatalReturn.auditControlInfoError->auditControlInfo.latestCallTimeStamp = 
-		m_transferBatch->auditControlInfo->latestCallTimeStamp;
-	returnDetail->choice.fatalReturn.auditControlInfoError->auditControlInfo.operatorSpecInformation = 
-		m_transferBatch->auditControlInfo->operatorSpecInformation;
-	returnDetail->choice.fatalReturn.auditControlInfoError->auditControlInfo.totalAdvisedChargeValueList = 
-		m_transferBatch->auditControlInfo->totalAdvisedChargeValueList;
-	returnDetail->choice.fatalReturn.auditControlInfoError->auditControlInfo.totalCharge = 
-		m_transferBatch->auditControlInfo->totalCharge;
-	returnDetail->choice.fatalReturn.auditControlInfoError->auditControlInfo.totalChargeRefund = 
-		m_transferBatch->auditControlInfo->totalChargeRefund;
-	returnDetail->choice.fatalReturn.auditControlInfoError->auditControlInfo.totalDiscountRefund = 
-		m_transferBatch->auditControlInfo->totalDiscountRefund;
-	returnDetail->choice.fatalReturn.auditControlInfoError->auditControlInfo.totalDiscountValue = 
-		m_transferBatch->auditControlInfo->totalDiscountValue;
-	returnDetail->choice.fatalReturn.auditControlInfoError->auditControlInfo.totalTaxRefund = 
-		m_transferBatch->auditControlInfo->totalTaxRefund;
-	returnDetail->choice.fatalReturn.auditControlInfoError->auditControlInfo.totalTaxValue = 
-		m_transferBatch->auditControlInfo->totalTaxValue;
-
+	returnDetail->choice.fatalReturn.auditControlInfoError->auditControlInfo = *m_transferBatch->auditControlInfo;
+	
 	ErrorDetail* errorDetail = (ErrorDetail*) calloc(1, sizeof(ErrorDetail));
 	errorDetail->errorCode = errorCode;
 
@@ -1179,9 +867,12 @@ int TAPValidator::CreateAuditControlInfoRAPFile(string logMessage, int errorCode
 	assert(m_transferBatch->batchControlInfo->sender);
 	assert(m_transferBatch->batchControlInfo->sender);
 	assert(m_transferBatch->batchControlInfo->fileAvailableTimeStamp);
-	int loadRes = rapFile.CreateRAPFile(returnBatch, returnDetail, m_roamingHubID, (char*)m_transferBatch->batchControlInfo->sender->buf,
-		(char*) m_transferBatch->batchControlInfo->recipient->buf, (char*) m_transferBatch->batchControlInfo->fileAvailableTimeStamp->localTimeStamp->buf,
-		(m_transferBatch->batchControlInfo->fileTypeIndicator ? (char*) m_transferBatch->batchControlInfo->fileTypeIndicator->buf : ""),
+	int loadRes = rapFile.CreateRAPFile(returnBatch, &returnDetail, 1, 0, m_roamingHubID, 
+		(char*)m_transferBatch->batchControlInfo->sender->buf,
+		(char*) m_transferBatch->batchControlInfo->recipient->buf, 
+		(char*) m_transferBatch->batchControlInfo->fileAvailableTimeStamp->localTimeStamp->buf,
+		(m_transferBatch->batchControlInfo->fileTypeIndicator ? 
+			(char*) m_transferBatch->batchControlInfo->fileTypeIndicator->buf : ""),
 		m_rapFileID, m_rapSequenceNum);
 	
 	// Clear previously copied pointers to avoid ASN_STRUCT_FREE errors
@@ -1273,9 +964,12 @@ int TAPValidator::CreateTransferBatchRAPFile(string logMessage, int errorCode)
 	assert(m_transferBatch->batchControlInfo->sender);
 	assert(m_transferBatch->batchControlInfo->recipient);
 	assert(m_transferBatch->batchControlInfo->fileAvailableTimeStamp);
-	int loadRes = rapFile.CreateRAPFile(returnBatch, returnDetail, m_roamingHubID, (char*)m_transferBatch->batchControlInfo->sender->buf,
-		(char*) m_transferBatch->batchControlInfo->recipient->buf, (char*) m_transferBatch->batchControlInfo->fileAvailableTimeStamp->localTimeStamp->buf,
-		(m_transferBatch->batchControlInfo->fileTypeIndicator ? (char*) m_transferBatch->batchControlInfo->fileTypeIndicator->buf : ""),
+	int loadRes = rapFile.CreateRAPFile(returnBatch, &returnDetail, 1, 0, m_roamingHubID, 
+		(char*)m_transferBatch->batchControlInfo->sender->buf,
+		(char*) m_transferBatch->batchControlInfo->recipient->buf, 
+		(char*) m_transferBatch->batchControlInfo->fileAvailableTimeStamp->localTimeStamp->buf,
+		(m_transferBatch->batchControlInfo->fileTypeIndicator ? 
+			(char*) m_transferBatch->batchControlInfo->fileTypeIndicator->buf : ""),
 		m_rapFileID, m_rapSequenceNum);
 	ASN_STRUCT_FREE(asn_DEF_ReturnBatch, returnBatch);
 	return loadRes;
@@ -1368,7 +1062,7 @@ int TAPValidator::CreateNotificationRAPFile(string logMessage, int errorCode, co
 	assert(m_notification->sender);
 	assert(m_notification->recipient);
 	assert(m_notification->fileAvailableTimeStamp);
-	int loadRes = rapFile.CreateRAPFile(returnBatch, returnDetail, m_roamingHubID, (char*)m_notification->sender->buf,
+	int loadRes = rapFile.CreateRAPFile(returnBatch, &returnDetail, 1, 0, m_roamingHubID, (char*)m_notification->sender->buf,
 		(char*) m_notification->recipient->buf, (char*) m_notification->fileAvailableTimeStamp->localTimeStamp->buf,
 		(m_notification->fileTypeIndicator ? (char*) m_notification->fileTypeIndicator->buf : ""),
 		m_rapFileID, m_rapSequenceNum);
@@ -1440,42 +1134,4 @@ long TAPValidator::GetRapFileID()
 string TAPValidator::GetRapSequenceNum()
 {
 	return m_rapSequenceNum;
-}
-
-
-long TAPValidator::ValidateCallIOT(long long eventID, CallTypeForValidation callType)
-{
-	otl_nocommit_stream otlStream;
-	switch (callType) {
-	case TELEPHONY_CALL:
-		otlStream.open(1, "call BILLING.TAP3_IOT.ValidateTapCall(:event_id /*bigint,in*/, :err_descr /*char[255],out*/) "
-			"into :res /*long,out*/", m_otlConnect);
-		break;
-	case GPRS_CALL:
-		otlStream.open(1, "call BILLING.TAP3_IOT.ValidateGPRSCall(:event_id /*bigint,in*/, :err_descr /*char[255],out*/) "
-			"into :res /*long,out*/", m_otlConnect);
-		break;
-	default:
-		return VALIDATION_IMPOSSIBLE;
-	}
-	otlStream << eventID;
-	long res;
-	string errorDescr;
-	otlStream
-		>> errorDescr
-		>> res;
-
-	otlStream.close();
-	if (res != RAEX_IOT_VALID) {
-		otlStream.open( 1,
-			"insert into BILLING.TAP3_VALIDATION_LOG (EVENT_ID, VALIDATION_TIME, RESULT, DESCRIPTION) "
-			"values ("
-			  ":eventid /*bigint,in*/, sysdate, :res /*long,in*/, :descr/*char[255],in*/) ", m_otlConnect);
-		otlStream
-			<< eventID
-			<< res
-			<< errorDescr;
-		otlStream.close();
-	}
-	return res;
 }

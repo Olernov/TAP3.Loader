@@ -301,7 +301,7 @@ long GetSenderNetworkID(long& iotValidationMode)
 	long mobileNetworkID;
 	otlStream >> mobileNetworkID;
 	otlStream.close();
-	otlStream.open(1, "select nvl(iot_validation_mode_id, :iot_no_need /*long,in*/) from BILLING.TMobileNetwork "
+	otlStream.open(1, "select nvl(iot_validation_mode_id, :iot_no_need/*int,in*/) from BILLING.TMobileNetwork "
 		"where object_no = :mobilenetworkid /*long,in*/", otlConnect);
 	otlStream 
 		<< IOT_NO_NEED
@@ -553,7 +553,7 @@ long long ProcessOriginatedCall(long fileID, int index, const MobileOriginatedCa
 	otlStream
 		<< (pMCall->locationInformation->geographicalLocation ? ( pMCall->locationInformation->geographicalLocation->servingNetwork ?
 			(const char*) pMCall->locationInformation->geographicalLocation->servingNetwork->buf : "") : "")
-		<< (pMCall->equipmentIdentifier ?	( pMCall->equipmentIdentifier->present == ImeiOrEsn_PR_imei ? BCDString( &pMCall->equipmentIdentifier->choice.imei ) : 
+		<< (pMCall->equipmentIdentifier ? ( pMCall->equipmentIdentifier->present == ImeiOrEsn_PR_imei ? BCDString( &pMCall->equipmentIdentifier->choice.imei ) : 
 			(pMCall->equipmentIdentifier->present == ImeiOrEsn_PR_esn ?	BCDString( &pMCall->equipmentIdentifier->choice.esn ) : "")) : "")
 		<< (pMCall->basicCallInformation->rapFileSequenceNumber ? (const char*) pMCall->basicCallInformation->rapFileSequenceNumber->buf : "")
 	;
@@ -936,7 +936,7 @@ long long ProcessGPRSCall(long fileID, int index, const GprsCall* pMCall)
 	// обработаем набор Charge Information
 	for(int chr_ind=0; chr_ind < pMCall->gprsServiceUsed->chargeInformationList->list.count; chr_ind++)
 	{
-		sprintf(szChrInfo,"Номер звонка %d\nНомер Charge Information %d",index, chr_ind);
+		sprintf(szChrInfo,"Номер звонка %d\nНомер Charge Information %d", index, chr_ind);
 		chrinfoRes=ProcessChrInfo(eventID, pMCall->gprsServiceUsed->chargeInformationList->list.array[chr_ind], szChrInfo);
 		if(chrinfoRes<0) return chrinfoRes;
 	}
@@ -972,23 +972,24 @@ void Finalize(bool bSuccess = false)
 	if (buffer ) delete [] buffer;
 }
 //------------------------------
-int LoadTAPEventsToDB(long fileID, long iotValidationMode)
+int LoadTAPEventsToDB(long fileID, long iotValidationMode, long roamingHubID)
 {
 	long long eventID;
 	long validationRes;
 	otl_nocommit_stream otlCallUpdater;
-	CallValidator callValidator(otlConnect, dataInterchange->choice.transferBatch, config);
-	for(int index=1; index <= dataInterchange->choice.transferBatch.callEventDetails->list.count; index++)
+	CallValidator callValidator(otlConnect, &dataInterchange->choice.transferBatch, config);
+	for(int index=0; index < dataInterchange->choice.transferBatch.callEventDetails->list.count; index++)
 	{
-		switch( dataInterchange->choice.transferBatch.callEventDetails->list.array[index-1]->present) {
+		switch( dataInterchange->choice.transferBatch.callEventDetails->list.array[index]->present) {
 		case CallEventDetail_PR_mobileOriginatedCall:
-			if ((eventID = ProcessOriginatedCall(fileID, index,
-					&dataInterchange->choice.transferBatch.callEventDetails->list.array[index - 1]->choice.mobileOriginatedCall)) < 0) {
+			if ((eventID = ProcessOriginatedCall(fileID, index + 1,
+					&dataInterchange->choice.transferBatch.callEventDetails->list.array[index]->choice.mobileOriginatedCall)) < 0) {
 				// ошибка загрузки
 				return (long) eventID;
 			}
 			if (iotValidationMode != IOT_NO_NEED) {
-				validationRes = callValidator.ValidateCallIOT(eventID, TELEPHONY_CALL, (iotValidationMode >= IOT_RAP_DROPOUT_ALERT));
+				validationRes = callValidator.ValidateCallIOT(eventID, TELEPHONY_CALL, index, 
+					(iotValidationMode >= IOT_RAP_DROPOUT_ALERT));
 				if (iotValidationMode == IOT_DROPOUT_ALERT || iotValidationMode == IOT_RAP_DROPOUT_ALERT) {
 					otlCallUpdater.open(1,
 						"update BILLING.TAP3_CALL SET IOT_VALIDATION_RES = :res /*long,in*/ WHERE EVENT_ID=:eventid /*bigint,in*/", otlConnect);
@@ -1000,13 +1001,14 @@ int LoadTAPEventsToDB(long fileID, long iotValidationMode)
 			}
 			break;
 		case CallEventDetail_PR_mobileTerminatedCall:
-			if ((eventID = ProcessTerminatedCall(fileID, index, 
-					&dataInterchange->choice.transferBatch.callEventDetails->list.array[index - 1]->choice.mobileTerminatedCall)) < 0) {
+			if ((eventID = ProcessTerminatedCall(fileID, index+1, 
+					&dataInterchange->choice.transferBatch.callEventDetails->list.array[index]->choice.mobileTerminatedCall)) < 0) {
 				// ошибка загрузки
 				return (long)eventID;
 			}
 			if (iotValidationMode != IOT_NO_NEED) {
-				validationRes = callValidator.ValidateCallIOT(eventID, TELEPHONY_CALL, (iotValidationMode >= IOT_RAP_DROPOUT_ALERT));
+				validationRes = callValidator.ValidateCallIOT(eventID, TELEPHONY_CALL, index, 
+					(iotValidationMode >= IOT_RAP_DROPOUT_ALERT));
 				if (iotValidationMode == IOT_DROPOUT_ALERT || iotValidationMode == IOT_RAP_DROPOUT_ALERT) {
 					otlCallUpdater.open(1,
 						"update BILLING.TAP3_CALL SET IOT_VALIDATION_RES = :res /*long,in*/ WHERE EVENT_ID=:eventid /*bigint,in*/", otlConnect);
@@ -1022,13 +1024,14 @@ int LoadTAPEventsToDB(long fileID, long iotValidationMode)
 			break;
 
 		case CallEventDetail_PR_gprsCall:
-			if ((eventID = ProcessGPRSCall(fileID, index, 
-					&dataInterchange->choice.transferBatch.callEventDetails->list.array[index - 1]->choice.gprsCall)) < 0) {
+			if ((eventID = ProcessGPRSCall(fileID, index+1, 
+					&dataInterchange->choice.transferBatch.callEventDetails->list.array[index]->choice.gprsCall)) < 0) {
 				// ошибка загрузки
 				return (long) eventID;
 			}
 			if (iotValidationMode != IOT_NO_NEED) {
-				validationRes = callValidator.ValidateCallIOT(eventID, GPRS_CALL, (iotValidationMode >= IOT_RAP_DROPOUT_ALERT));
+				validationRes = callValidator.ValidateCallIOT(eventID, GPRS_CALL, index, 
+					(iotValidationMode >= IOT_RAP_DROPOUT_ALERT));
 				if (iotValidationMode == IOT_DROPOUT_ALERT || iotValidationMode == IOT_RAP_DROPOUT_ALERT) {
 					otlCallUpdater.open(1,
 						"update BILLING.TAP3_GPRSCALL SET IOT_VALIDATION_RES = :res /*long,in*/ WHERE EVENT_ID=:eventid /*bigint,in*/", otlConnect);
@@ -1043,10 +1046,15 @@ int LoadTAPEventsToDB(long fileID, long iotValidationMode)
 			if (!debugMode) {
 				log(pShortName, LOG_ERROR, string("No handler for call event detail type=") + 
 					to_string( static_cast<unsigned long long> (dataInterchange->choice.transferBatch.callEventDetails->list.array[index-1]->present)) +
-					string(". Call number=") + to_string(static_cast<unsigned long long> (index)));
+					string(". Call number=") + to_string(static_cast<unsigned long long> (index+1)));
 				return TL_NEWCOMPONENT;
 			}
 		}
+	}
+	if (callValidator.GotReturnBatch()) {
+		int writeRes = callValidator.WriteRAPFile(roamingHubID);
+		if (writeRes != TL_OK)
+			return TL_TAP_NOT_VALIDATED;
 	}
 	return TL_OK;
 }
@@ -1254,7 +1262,7 @@ int LoadTAPFileToDB( unsigned char* buffer, long dataLen, long fileID, long roam
 			// Finish processing here. No call records are uploaded for Fatal Error TAP files
 			return TL_OK;
 		
-		return LoadTAPEventsToDB(fileID, iotValidationMode);
+		return LoadTAPEventsToDB(fileID, iotValidationMode, roamingHubID);
 	}
 	catch (otl_exception &otlEx) {
 		otlConnect.rollback();
@@ -1513,7 +1521,7 @@ int LoadRAPSevereReturn(long fileID, const SevereReturn& severeReturn)
 		<< fileID
 		<< severeReturn.fileSequenceNumber.buf
 		<< eventID
-		<< operSpecInfo;
+ 		<< operSpecInfo;
 
 	otlStream.flush();
 	otlStream >> returnID;
@@ -1525,15 +1533,15 @@ int LoadRAPSevereReturn(long fileID, const SevereReturn& severeReturn)
 //-----------------------------------------------------
 
 int LoadReturnBatchToDB(ReturnBatch* returnBatch, long fileID, long roamingHubID, string rapFilename, long fileStatus)
-			{
+{
 		// set TAP power value used to convert integer values from file to double values for DB
 	double dblTAPPower;
-		if( returnBatch->rapBatchControlInfoRap.tapDecimalPlaces )
+	if( returnBatch->rapBatchControlInfoRap.tapDecimalPlaces )
 		dblTAPPower = pow( (double) 10, *returnBatch->rapBatchControlInfoRap.tapDecimalPlaces );
-		else
+	else
 		dblTAPPower = 1;
 
-		otl_nocommit_stream otlStream;
+	otl_nocommit_stream otlStream;
 	try {	
 		// REGISTER RAP FILE IN DB 
 		otlStream.open( 1 /*stream buffer size in logical rows*/, 

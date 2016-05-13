@@ -2,8 +2,10 @@ class RAPFile
 {
 public:
 	RAPFile(otl_connect&, Config&);
-	int CreateRAPFile(ReturnBatch* returnBatch, ReturnDetail* returnDetail, long roamingHubID, string sender, string recipient,
-		string tapAvailableStamp, string fileTypeIndicator, long& rapFileID, string& rapFilename);
+	int CreateRAPFile(ReturnBatch* returnBatch, ReturnDetail* returnDetail[],
+		int returnDetailsCount, long long totalSevereReturn, long roamingHubID,
+		string tapSender, string tapRecipient, string tapAvailableStamp, string fileTypeIndicator,
+		long& rapFileID, string& rapSequenceNum);
 private:
 	otl_connect& m_otlConnect;
 	Config& m_config;

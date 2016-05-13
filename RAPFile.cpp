@@ -115,8 +115,10 @@ int RAPFile::EncodeAndUpload(ReturnBatch* returnBatch, string filename, string r
 }
 
 
-int RAPFile::CreateRAPFile(ReturnBatch* returnBatch, ReturnDetail* returnDetail, long roamingHubID, string tapSender, string tapRecipient, 
-	string tapAvailableStamp, string fileTypeIndicator, long& rapFileID, string& rapSequenceNum)
+int RAPFile::CreateRAPFile(ReturnBatch* returnBatch, ReturnDetail* returnDetail[], 
+	int returnDetailsCount, long long totalSevereReturn, long roamingHubID, 
+	string tapSender, string tapRecipient, string tapAvailableStamp, string fileTypeIndicator, 
+	long& rapFileID, string& rapSequenceNum)
 {
 	otl_nocommit_stream otlStream;
 	otlStream.open(1, "call BILLING.TAP3.CreateRAPFileByTAPLoader(:pRecipientTAPCode /*char[10],in*/, :pRoamingHubID /*long,in*/, "
@@ -182,11 +184,11 @@ int RAPFile::CreateRAPFile(ReturnBatch* returnBatch, ReturnDetail* returnDetail,
 		
 // TODO: Operator specific info is mandatory for IOT errors (TD.52 RAP implementation handbook)
 // Fill it for Severe errors
-			
-	ASN_SEQUENCE_ADD(&returnBatch->returnDetails, returnDetail);
+	for (int i = 0; i < returnDetailsCount; i++)
+		ASN_SEQUENCE_ADD(&returnBatch->returnDetails, returnDetail[i]);
 
-	OctetString_fromInt64(returnBatch->rapAuditControlInfo.totalSevereReturnValue, (long long) 0);
-	returnBatch->rapAuditControlInfo.returnDetailsCount = 1; // For Fatal errors 
+	OctetString_fromInt64(returnBatch->rapAuditControlInfo.totalSevereReturnValue, totalSevereReturn);
+	returnBatch->rapAuditControlInfo.returnDetailsCount = returnDetailsCount;
 
 	int loadResult = LoadReturnBatchToDB(returnBatch, rapFileID, roamingHubID, filename, OUTFILE_CREATED_AND_SENT);
 	if (loadResult >= 0)
