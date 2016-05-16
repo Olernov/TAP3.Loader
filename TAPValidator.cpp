@@ -52,8 +52,6 @@ FileDuplicationCheckRes TAPValidator::IsFileDuplicated()
 		":file_type_indic /*char[20],in*/, :rap_file_seqnum /*char[20],in*/, :notif /*short,in*/, to_date(:avail_stamp /*char[20],in*/,'yyyymmddhh24miss'),"
 		":event_count /*long,in*/, :total_charge /*double,in*/ ) "
 		"into :res /*long,out*/", m_otlConnect);
-	// TODO: check file contents by total event count, notification/transfer batch, total charge etc.
-	// If contents are the same just ignore this file. Otherwise create RAP.
 	if (m_transferBatch) {
 		double tapPower=pow( (double) 10, *m_transferBatch->accountingInfo->tapDecimalPlaces);
 		otlStream
@@ -267,20 +265,22 @@ int TAPValidator::CreateBatchControlInfoRAPFile(string logMessage, int errorCode
 	}
 	ASN_SEQUENCE_ADD(&returnDetail->choice.fatalReturn.batchControlError->errorDetail, errorDetail);
 
-	ReturnBatch* returnBatch = (ReturnBatch*) calloc(1, sizeof(ReturnBatch));
-	RAPFile rapFile(m_otlConnect, m_config);
+	RAPFile rapFile(m_otlConnect, m_config, m_roamingHubID);
 	
 	assert(m_transferBatch->batchControlInfo->sender);
 	assert(m_transferBatch->batchControlInfo->recipient);
 	assert(m_transferBatch->batchControlInfo->fileAvailableTimeStamp);
-	int loadRes = rapFile.CreateRAPFile(returnBatch, &returnDetail, 1, 0, m_roamingHubID, 
-		(char*)m_transferBatch->batchControlInfo->sender->buf,
-		(char*) m_transferBatch->batchControlInfo->recipient->buf, 
-		(char*) m_transferBatch->batchControlInfo->fileAvailableTimeStamp->localTimeStamp->buf,
-		(m_transferBatch->batchControlInfo->fileTypeIndicator ? 
-			(char*) m_transferBatch->batchControlInfo->fileTypeIndicator->buf : ""),
-		m_rapFileID, m_rapSequenceNum);
-	
+
+	rapFile.Initialize((char*)m_transferBatch->batchControlInfo->sender->buf,
+		(char*)m_transferBatch->batchControlInfo->recipient->buf,
+		(char*)m_transferBatch->batchControlInfo->fileAvailableTimeStamp->localTimeStamp->buf,
+		(m_transferBatch->batchControlInfo->fileTypeIndicator ?
+		(char*)m_transferBatch->batchControlInfo->fileTypeIndicator->buf : ""));
+	rapFile.AddReturnDetail(returnDetail, 0);
+	rapFile.Finalize();
+	rapFile.LoadToDB();
+	int loadRes = rapFile.EncodeAndUpload();
+
 	// Clear previously copied pointers to avoid ASN_STRUCT_FREE errors
 	returnDetail->choice.fatalReturn.batchControlError->batchControlInfo.sender = NULL;
 	returnDetail->choice.fatalReturn.batchControlError->batchControlInfo.recipient = NULL;
@@ -293,8 +293,7 @@ int TAPValidator::CreateBatchControlInfoRAPFile(string logMessage, int errorCode
 	returnDetail->choice.fatalReturn.batchControlError->batchControlInfo.rapFileSequenceNumber = NULL;
 	returnDetail->choice.fatalReturn.batchControlError->batchControlInfo.releaseVersionNumber = NULL;
 	returnDetail->choice.fatalReturn.batchControlError->batchControlInfo.specificationVersionNumber = NULL;
-	ASN_STRUCT_FREE(asn_DEF_ReturnBatch, returnBatch);
-
+	
 	return loadRes;
 }
 
@@ -416,20 +415,22 @@ int TAPValidator::CreateAccountingInfoRAPFile(string logMessage, int errorCode, 
 	}
 	ASN_SEQUENCE_ADD(&returnDetail->choice.fatalReturn.accountingInfoError->errorDetail, errorDetail);
 
-	ReturnBatch* returnBatch = (ReturnBatch*) calloc(1, sizeof(ReturnBatch));
-	RAPFile rapFile(m_otlConnect, m_config);
+	RAPFile rapFile(m_otlConnect, m_config, m_roamingHubID);
 	
 	assert(m_transferBatch->batchControlInfo->sender);
 	assert(m_transferBatch->batchControlInfo->recipient);
 	assert(m_transferBatch->batchControlInfo->fileAvailableTimeStamp);
-	int loadRes = rapFile.CreateRAPFile(returnBatch, &returnDetail, 1, 0, m_roamingHubID, 
-		(char*)m_transferBatch->batchControlInfo->sender->buf,
-		(char*) m_transferBatch->batchControlInfo->recipient->buf, 
-		(char*) m_transferBatch->batchControlInfo->fileAvailableTimeStamp->localTimeStamp->buf,
-		(m_transferBatch->batchControlInfo->fileTypeIndicator ? 
-			(char*) m_transferBatch->batchControlInfo->fileTypeIndicator->buf : ""),
-		m_rapFileID, m_rapSequenceNum);
-	
+
+	rapFile.Initialize((char*)m_transferBatch->batchControlInfo->sender->buf,
+		(char*)m_transferBatch->batchControlInfo->recipient->buf,
+		(char*)m_transferBatch->batchControlInfo->fileAvailableTimeStamp->localTimeStamp->buf,
+		(m_transferBatch->batchControlInfo->fileTypeIndicator ?
+		(char*)m_transferBatch->batchControlInfo->fileTypeIndicator->buf : ""));
+	rapFile.AddReturnDetail(returnDetail, 0);
+	rapFile.Finalize();
+	rapFile.LoadToDB();
+	int loadRes = rapFile.EncodeAndUpload();
+
 	// Clear previously copied pointers to avoid ASN_STRUCT_FREE errors
 	returnDetail->choice.fatalReturn.accountingInfoError->accountingInfo.currencyConversionInfo = NULL;
 	returnDetail->choice.fatalReturn.accountingInfoError->accountingInfo.discounting = NULL;
@@ -437,8 +438,7 @@ int TAPValidator::CreateAccountingInfoRAPFile(string logMessage, int errorCode, 
 	returnDetail->choice.fatalReturn.accountingInfoError->accountingInfo.tapCurrency = NULL;
 	returnDetail->choice.fatalReturn.accountingInfoError->accountingInfo.tapDecimalPlaces = NULL;
 	returnDetail->choice.fatalReturn.accountingInfoError->accountingInfo.taxation = NULL;
-	ASN_STRUCT_FREE(asn_DEF_ReturnBatch, returnBatch);
-
+	
 	return loadRes;
 }
 
@@ -630,8 +630,6 @@ TAPValidationResult TAPValidator::ValidateAccountingInfo()
 					log(LOG_ERROR, "Could not validate exchange rates, error code " + to_string((long long) validationRes) + " (" + logMessage + ")");
 					return VALIDATION_IMPOSSIBLE;
 			}
-			// check exchange rate code
-			// TODO: add checks ?
 		}
 	}
 
@@ -743,25 +741,26 @@ int TAPValidator::CreateNetworkInfoRAPFile(string logMessage, int errorCode, con
 	}
 	ASN_SEQUENCE_ADD(&returnDetail->choice.fatalReturn.networkInfoError->errorDetail, errorDetail);
 
-	ReturnBatch* returnBatch = (ReturnBatch*) calloc(1, sizeof(ReturnBatch));
-	RAPFile rapFile(m_otlConnect, m_config);
+	RAPFile rapFile(m_otlConnect, m_config, m_roamingHubID);
 	
 	assert(m_transferBatch->batchControlInfo->sender);
 	assert(m_transferBatch->batchControlInfo->recipient);
 	assert(m_transferBatch->batchControlInfo->fileAvailableTimeStamp);
-	int loadRes = rapFile.CreateRAPFile(returnBatch, &returnDetail, 1, 0, m_roamingHubID, 
-		(char*)m_transferBatch->batchControlInfo->sender->buf,
-		(char*) m_transferBatch->batchControlInfo->recipient->buf, 
-		(char*) m_transferBatch->batchControlInfo->fileAvailableTimeStamp->localTimeStamp->buf,
-		(m_transferBatch->batchControlInfo->fileTypeIndicator ? 
-			(char*) m_transferBatch->batchControlInfo->fileTypeIndicator->buf : ""),
-		m_rapFileID, m_rapSequenceNum);
-	
+
+	rapFile.Initialize((char*)m_transferBatch->batchControlInfo->sender->buf,
+		(char*)m_transferBatch->batchControlInfo->recipient->buf,
+		(char*)m_transferBatch->batchControlInfo->fileAvailableTimeStamp->localTimeStamp->buf,
+		(m_transferBatch->batchControlInfo->fileTypeIndicator ?
+		(char*)m_transferBatch->batchControlInfo->fileTypeIndicator->buf : ""));
+	rapFile.AddReturnDetail(returnDetail, 0);
+	rapFile.Finalize();
+	rapFile.LoadToDB();
+	int loadRes = rapFile.EncodeAndUpload();
+
 	// Clear previously copied pointers to avoid ASN_STRUCT_FREE errors
 	returnDetail->choice.fatalReturn.networkInfoError->networkInfo.recEntityInfo = NULL;
 	returnDetail->choice.fatalReturn.networkInfoError->networkInfo.utcTimeOffsetInfo = NULL;
-	ASN_STRUCT_FREE(asn_DEF_ReturnBatch, returnBatch);
-
+	
 	return loadRes;
 }
 
@@ -861,20 +860,22 @@ int TAPValidator::CreateAuditControlInfoRAPFile(string logMessage, int errorCode
 	}
 	ASN_SEQUENCE_ADD(&returnDetail->choice.fatalReturn.auditControlInfoError->errorDetail, errorDetail);
 
-	ReturnBatch* returnBatch = (ReturnBatch*) calloc(1, sizeof(ReturnBatch));
-	RAPFile rapFile(m_otlConnect, m_config);
+	RAPFile rapFile(m_otlConnect, m_config, m_roamingHubID);
 	
 	assert(m_transferBatch->batchControlInfo->sender);
 	assert(m_transferBatch->batchControlInfo->sender);
 	assert(m_transferBatch->batchControlInfo->fileAvailableTimeStamp);
-	int loadRes = rapFile.CreateRAPFile(returnBatch, &returnDetail, 1, 0, m_roamingHubID, 
-		(char*)m_transferBatch->batchControlInfo->sender->buf,
-		(char*) m_transferBatch->batchControlInfo->recipient->buf, 
-		(char*) m_transferBatch->batchControlInfo->fileAvailableTimeStamp->localTimeStamp->buf,
-		(m_transferBatch->batchControlInfo->fileTypeIndicator ? 
-			(char*) m_transferBatch->batchControlInfo->fileTypeIndicator->buf : ""),
-		m_rapFileID, m_rapSequenceNum);
-	
+
+	rapFile.Initialize((char*)m_transferBatch->batchControlInfo->sender->buf,
+		(char*)m_transferBatch->batchControlInfo->recipient->buf,
+		(char*)m_transferBatch->batchControlInfo->fileAvailableTimeStamp->localTimeStamp->buf,
+		(m_transferBatch->batchControlInfo->fileTypeIndicator ?
+		(char*)m_transferBatch->batchControlInfo->fileTypeIndicator->buf : ""));
+	rapFile.AddReturnDetail(returnDetail, 0);
+	rapFile.Finalize();
+	rapFile.LoadToDB();
+	int loadRes = rapFile.EncodeAndUpload();
+
 	// Clear previously copied pointers to avoid ASN_STRUCT_FREE errors
 	returnDetail->choice.fatalReturn.auditControlInfoError->auditControlInfo.callEventDetailsCount = NULL;
 	returnDetail->choice.fatalReturn.auditControlInfoError->auditControlInfo.earliestCallTimeStamp = NULL;
@@ -887,7 +888,6 @@ int TAPValidator::CreateAuditControlInfoRAPFile(string logMessage, int errorCode
 	returnDetail->choice.fatalReturn.auditControlInfoError->auditControlInfo.totalDiscountValue = NULL;
 	returnDetail->choice.fatalReturn.auditControlInfoError->auditControlInfo.totalTaxRefund = NULL;
 	returnDetail->choice.fatalReturn.auditControlInfoError->auditControlInfo.totalTaxValue = NULL;
-	ASN_STRUCT_FREE(asn_DEF_ReturnBatch, returnBatch);
 	
 	return loadRes;
 }
@@ -958,20 +958,22 @@ int TAPValidator::CreateTransferBatchRAPFile(string logMessage, int errorCode)
 	ASN_SEQUENCE_ADD(errorDetail->errorContext, errorContext1level);
 	ASN_SEQUENCE_ADD(&returnDetail->choice.fatalReturn.transferBatchError->errorDetail, errorDetail);
 	
-	ReturnBatch* returnBatch = (ReturnBatch*) calloc(1, sizeof(ReturnBatch));
-	RAPFile rapFile(m_otlConnect, m_config);
+	RAPFile rapFile(m_otlConnect, m_config, m_roamingHubID);
 	
 	assert(m_transferBatch->batchControlInfo->sender);
 	assert(m_transferBatch->batchControlInfo->recipient);
 	assert(m_transferBatch->batchControlInfo->fileAvailableTimeStamp);
-	int loadRes = rapFile.CreateRAPFile(returnBatch, &returnDetail, 1, 0, m_roamingHubID, 
-		(char*)m_transferBatch->batchControlInfo->sender->buf,
-		(char*) m_transferBatch->batchControlInfo->recipient->buf, 
-		(char*) m_transferBatch->batchControlInfo->fileAvailableTimeStamp->localTimeStamp->buf,
-		(m_transferBatch->batchControlInfo->fileTypeIndicator ? 
-			(char*) m_transferBatch->batchControlInfo->fileTypeIndicator->buf : ""),
-		m_rapFileID, m_rapSequenceNum);
-	ASN_STRUCT_FREE(asn_DEF_ReturnBatch, returnBatch);
+	
+	rapFile.Initialize((char*)m_transferBatch->batchControlInfo->sender->buf,
+		(char*)m_transferBatch->batchControlInfo->recipient->buf,
+		(char*)m_transferBatch->batchControlInfo->fileAvailableTimeStamp->localTimeStamp->buf,
+		(m_transferBatch->batchControlInfo->fileTypeIndicator ?
+		(char*)m_transferBatch->batchControlInfo->fileTypeIndicator->buf : ""));
+	rapFile.AddReturnDetail(returnDetail, 0);
+	rapFile.Finalize();
+	rapFile.LoadToDB();
+	int loadRes = rapFile.EncodeAndUpload();
+
 	return loadRes;
 }
 
@@ -1056,17 +1058,22 @@ int TAPValidator::CreateNotificationRAPFile(string logMessage, int errorCode, co
 	}
 	ASN_SEQUENCE_ADD(&returnDetail->choice.fatalReturn.notificationError->errorDetail, errorDetail);
 	
-	ReturnBatch* returnBatch = (ReturnBatch*) calloc(1, sizeof(ReturnBatch));
-	RAPFile rapFile(m_otlConnect, m_config);
+	RAPFile rapFile(m_otlConnect, m_config, m_roamingHubID);
 	
 	assert(m_notification->sender);
 	assert(m_notification->recipient);
 	assert(m_notification->fileAvailableTimeStamp);
-	int loadRes = rapFile.CreateRAPFile(returnBatch, &returnDetail, 1, 0, m_roamingHubID, (char*)m_notification->sender->buf,
-		(char*) m_notification->recipient->buf, (char*) m_notification->fileAvailableTimeStamp->localTimeStamp->buf,
-		(m_notification->fileTypeIndicator ? (char*) m_notification->fileTypeIndicator->buf : ""),
-		m_rapFileID, m_rapSequenceNum);
-	ASN_STRUCT_FREE(asn_DEF_ReturnBatch, returnBatch);
+
+	rapFile.Initialize((char*)m_notification->sender->buf,
+		(char*) m_notification->recipient->buf, 
+		(char*) m_notification->fileAvailableTimeStamp->localTimeStamp->buf,
+		(m_notification->fileTypeIndicator ? 
+			(char*) m_notification->fileTypeIndicator->buf : ""));
+	rapFile.AddReturnDetail(returnDetail, 0);
+	rapFile.Finalize();
+	rapFile.LoadToDB();
+	int loadRes = rapFile.EncodeAndUpload();
+
 	return loadRes;
 }
 

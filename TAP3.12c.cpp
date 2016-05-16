@@ -11,6 +11,7 @@
 #include "TAP_Constants.h"
 #include "ConfigContainer.h"
 #include "TAPValidator.h"
+#include "RapFile.h"
 #include "CallValidator.h"
 
 
@@ -977,7 +978,7 @@ int LoadTAPEventsToDB(long fileID, long iotValidationMode, long roamingHubID)
 	long long eventID;
 	long validationRes;
 	otl_nocommit_stream otlCallUpdater;
-	CallValidator callValidator(otlConnect, &dataInterchange->choice.transferBatch, config);
+	CallValidator callValidator(otlConnect, &dataInterchange->choice.transferBatch, config, roamingHubID);
 	for(int index=0; index < dataInterchange->choice.transferBatch.callEventDetails->list.count; index++)
 	{
 		switch( dataInterchange->choice.transferBatch.callEventDetails->list.array[index]->present) {
@@ -987,18 +988,9 @@ int LoadTAPEventsToDB(long fileID, long iotValidationMode, long roamingHubID)
 				// ошибка загрузки
 				return (long) eventID;
 			}
-			if (iotValidationMode != IOT_NO_NEED) {
-				validationRes = callValidator.ValidateCallIOT(eventID, TELEPHONY_CALL, index, 
-					(iotValidationMode >= IOT_RAP_DROPOUT_ALERT));
-				if (iotValidationMode == IOT_DROPOUT_ALERT || iotValidationMode == IOT_RAP_DROPOUT_ALERT) {
-					otlCallUpdater.open(1,
-						"update BILLING.TAP3_CALL SET IOT_VALIDATION_RES = :res /*long,in*/ WHERE EVENT_ID=:eventid /*bigint,in*/", otlConnect);
-					otlCallUpdater
-						<< (long) validationRes
-						<< eventID;
-					otlCallUpdater.close();
-				}
-			}
+			validationRes = callValidator.ValidateCallIOT(eventID, TELEPHONY_CALL, index, iotValidationMode);
+			if (validationRes == VALIDATION_IMPOSSIBLE)
+				return TL_TAP_NOT_VALIDATED;
 			break;
 		case CallEventDetail_PR_mobileTerminatedCall:
 			if ((eventID = ProcessTerminatedCall(fileID, index+1, 
@@ -1006,18 +998,9 @@ int LoadTAPEventsToDB(long fileID, long iotValidationMode, long roamingHubID)
 				// ошибка загрузки
 				return (long)eventID;
 			}
-			if (iotValidationMode != IOT_NO_NEED) {
-				validationRes = callValidator.ValidateCallIOT(eventID, TELEPHONY_CALL, index, 
-					(iotValidationMode >= IOT_RAP_DROPOUT_ALERT));
-				if (iotValidationMode == IOT_DROPOUT_ALERT || iotValidationMode == IOT_RAP_DROPOUT_ALERT) {
-					otlCallUpdater.open(1,
-						"update BILLING.TAP3_CALL SET IOT_VALIDATION_RES = :res /*long,in*/ WHERE EVENT_ID=:eventid /*bigint,in*/", otlConnect);
-					otlCallUpdater
-						<< (long) validationRes
-						<< eventID;
-					otlCallUpdater.close();
-				}
-			}
+			validationRes = callValidator.ValidateCallIOT(eventID, TELEPHONY_CALL, index, iotValidationMode);
+			if (validationRes == VALIDATION_IMPOSSIBLE)
+				return TL_TAP_NOT_VALIDATED;
 			break;
 		case CallEventDetail_PR_supplServiceEvent:
 			// just ignore it
@@ -1029,18 +1012,9 @@ int LoadTAPEventsToDB(long fileID, long iotValidationMode, long roamingHubID)
 				// ошибка загрузки
 				return (long) eventID;
 			}
-			if (iotValidationMode != IOT_NO_NEED) {
-				validationRes = callValidator.ValidateCallIOT(eventID, GPRS_CALL, index, 
-					(iotValidationMode >= IOT_RAP_DROPOUT_ALERT));
-				if (iotValidationMode == IOT_DROPOUT_ALERT || iotValidationMode == IOT_RAP_DROPOUT_ALERT) {
-					otlCallUpdater.open(1,
-						"update BILLING.TAP3_GPRSCALL SET IOT_VALIDATION_RES = :res /*long,in*/ WHERE EVENT_ID=:eventid /*bigint,in*/", otlConnect);
-					otlCallUpdater
-						<< (long) validationRes
-						<< eventID;
-					otlCallUpdater.close();
-				}
-			}
+			validationRes = callValidator.ValidateCallIOT(eventID, GPRS_CALL, index, iotValidationMode);
+				if (validationRes == VALIDATION_IMPOSSIBLE)
+					return TL_TAP_NOT_VALIDATED;
 			break;
 		default:
 			if (!debugMode) {
@@ -1051,8 +1025,12 @@ int LoadTAPEventsToDB(long fileID, long iotValidationMode, long roamingHubID)
 			}
 		}
 	}
-	if (callValidator.GotReturnBatch()) {
-		int writeRes = callValidator.WriteRAPFile(roamingHubID);
+	RAPFile& rapFile = callValidator.GetRAPFile();
+	if (rapFile.Created()) {
+		log(pShortName, LOG_ERROR, "Some IOT validation errors detected.");
+		rapFile.Finalize();
+		rapFile.LoadToDB();
+		int writeRes = rapFile.EncodeAndUpload();
 		if (writeRes != TL_OK)
 			return TL_TAP_NOT_VALIDATED;
 	}

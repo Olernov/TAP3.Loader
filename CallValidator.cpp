@@ -4,34 +4,22 @@
 #include "BatchControlInfo.h"
 #include "ReturnBatch.h"
 #include "ConfigContainer.h"
+#include "RAPFile.h"
 #include "CallValidator.h"
 #include "TAPValidator.h"
-#include "RAPFile.h"
 
 using namespace std;
 
-#define NO_ASN_ITEMS	vector<ErrContextAsnItem>()
-
-extern void log(string filename, short msgType, string msgText);
-extern void log(short msgType, string msgText);
 extern long long OctetStr2Int64(const OCTET_STRING_t& octetStr);
-extern int LoadReturnBatchToDB(ReturnBatch* returnBatch, long fileID, long roamingHubID, string rapFilename, long fileStatus);
-extern int write_out(const void *buffer, size_t size, void *app_key);
-extern "C" int ncftp_main(int argc, char **argv, char* result);
 
-CallValidator::CallValidator(otl_connect& otlConnect, const TransferBatch* transferBatch, Config& config) :
+CallValidator::CallValidator(otl_connect& otlConnect, const TransferBatch* transferBatch, Config& config, long roamingHubID) :
 	m_otlConnect(otlConnect),
 	m_transferBatch(transferBatch),
 	m_config(config),
-	m_returnBatch(NULL),
-	m_totalSevereReturn(0)
+	m_rapFile(otlConnect, config, roamingHubID),
+	m_rapFileID(0)
 {}
 
-
-void CallValidator::CreateReturnBatch()
-{
-	m_returnBatch = (ReturnBatch*) calloc(1, sizeof(ReturnBatch));
-}
 
 // Calculates call total charge multiplied by TAP power based on TAP decimal places
 long CallValidator::CallTotalCharge(int callIndex)
@@ -75,7 +63,7 @@ void CallValidator::AddErrorContext(ErrorDetail* errorDetail, int ctxLevel, int 
 }
 
 
-void CallValidator::AddCallToReturnBatch(int callIndex, int errorCode)
+ReturnDetail* CallValidator::CreateReturnDetail(int callIndex, int errorCode)
 {
 	ReturnDetail* returnDetail = (ReturnDetail*) calloc(1, sizeof(ReturnDetail));
 	returnDetail->present = ReturnDetail_PR_severeReturn;
@@ -123,14 +111,14 @@ void CallValidator::AddCallToReturnBatch(int callIndex, int errorCode)
 		break;
 	}
 	ASN_SEQUENCE_ADD(&returnDetail->choice.severeReturn.errorDetail, errorDetail);
-	m_returnDetails.push_back(returnDetail);
-
-	m_totalSevereReturn += CallTotalCharge(callIndex);
+	return returnDetail;
 }
 
 
 long CallValidator::ValidateCallIOT(long long eventID, CallTypeForValidation callType, int callIndex, long iotValidationMode)
 {
+	if (iotValidationMode == IOT_NO_NEED)
+		return TL_OK;
 	otl_nocommit_stream otlStream;
 	switch (callType) {
 	case TELEPHONY_CALL:
@@ -147,7 +135,7 @@ long CallValidator::ValidateCallIOT(long long eventID, CallTypeForValidation cal
 		return VALIDATION_IMPOSSIBLE;
 	}
 	otlStream << eventID;
-	long res;
+	long validationRes;
 	string errorDescr, iotDate, calculation;
 	double expectedCharge;
 	otlStream
@@ -155,59 +143,41 @@ long CallValidator::ValidateCallIOT(long long eventID, CallTypeForValidation cal
 		>> iotDate
 		>> expectedCharge
 		>> calculation
-		>> res;
-
+		>> validationRes;
 	otlStream.close();
-	if (res != RAEX_IOT_VALID) {
-		otlStream.open( 1,
-			"insert into BILLING.TAP3_VALIDATION_LOG (EVENT_ID, VALIDATION_TIME, RESULT, DESCRIPTION) "
-			"values ("
-			  ":eventid /*bigint,in*/, sysdate, :res /*long,in*/, :descr/*char[255],in*/) ", m_otlConnect);
-		otlStream
-			<< eventID
-			<< res
-			<< errorDescr;
-		otlStream.close();
-		if(iotValidationMode >= IOT_RAP_DROPOUT_ALERT) {
-			// TODO: update TAP3_Call set cancel_rap_seq_num = ...
-			if (!m_returnBatch)
-				CreateReturnBatch();
-			AddCallToReturnBatch(callIndex, CHARGE_NOT_IN_ROAMING_AGREEMENT);
+	if (validationRes == VALIDATION_IMPOSSIBLE)
+		return VALIDATION_IMPOSSIBLE;
+
+	if (validationRes != RAEX_IOT_VALID) {
+		if (iotValidationMode == IOT_RAP_DROPOUT_ALERT) {
+			if (!m_rapFile.Created()) {
+				m_rapFile.Initialize((char*)m_transferBatch->batchControlInfo->sender->buf,
+					(char*)m_transferBatch->batchControlInfo->recipient->buf,
+					(char*)m_transferBatch->batchControlInfo->fileAvailableTimeStamp->localTimeStamp->buf,
+					(m_transferBatch->batchControlInfo->fileTypeIndicator ?
+					(char*)m_transferBatch->batchControlInfo->fileTypeIndicator->buf : ""));
+			}
+			m_rapFile.AddReturnDetail(CreateReturnDetail(callIndex, CHARGE_NOT_IN_ROAMING_AGREEMENT),
+				CallTotalCharge(callIndex));
 		}
 	}
-	return res;
+
+	otlStream.open(1, "call BILLING.TAP3_IOT.SetValidationResult(:call_type /*short,in*/, :event_id /*bigint,in*/, "
+		":iot_mode /*long,in*/, :res /*long,in*/, :err_descr /*char[255],in*/,"
+		":rapfileid /*long,in*/)", m_otlConnect);
+	otlStream
+		<< (short) callType
+		<< eventID
+		<< iotValidationMode
+		<< validationRes
+		<< errorDescr
+		<< m_rapFileID;
+	otlStream.close();
+	return TL_OK;
 }
 
 
-bool CallValidator::GotReturnBatch()
+RAPFile& CallValidator::GetRAPFile()
 {
-	return (m_returnBatch != NULL);
-}
-
-
-int CallValidator::WriteRAPFile(long roamingHubID)
-{
-	RAPFile rapFile(m_otlConnect, m_config);
-	
-	assert(m_transferBatch->batchControlInfo->sender);
-	assert(m_transferBatch->batchControlInfo->recipient);
-	assert(m_transferBatch->batchControlInfo->fileAvailableTimeStamp);
-	assert(m_returnBatch);
-
-	long rapFileID;
-	string rapSequenceNum;
-	int loadRes = rapFile.CreateRAPFile(
-		m_returnBatch, 
-		&m_returnDetails[0], 
-		m_returnDetails.size(), 
-		m_totalSevereReturn,
-		roamingHubID, 
-		(char*)m_transferBatch->batchControlInfo->sender->buf,
-		(char*) m_transferBatch->batchControlInfo->recipient->buf, 
-		(char*) m_transferBatch->batchControlInfo->fileAvailableTimeStamp->localTimeStamp->buf,
-		(m_transferBatch->batchControlInfo->fileTypeIndicator ? 
-			(char*) m_transferBatch->batchControlInfo->fileTypeIndicator->buf : ""),
-		rapFileID, 
-		rapSequenceNum);
-	return loadRes;
+	return m_rapFile;
 }
