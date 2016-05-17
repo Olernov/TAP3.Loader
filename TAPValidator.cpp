@@ -558,78 +558,78 @@ TAPValidationResult TAPValidator::ValidateAccountingInfo()
 	// Validating currency conversion table
 	if (m_transferBatch->accountingInfo->currencyConversionInfo) {
 		map<ExchangeRateCode_t, double> exchangeRates;
+		vector<ErrContextAsnItem> asnItems;
 		for (int i = 0; i < m_transferBatch->accountingInfo->currencyConversionInfo->list.count; i++) {
-			vector<ErrContextAsnItem> asnItems;
 			asnItems.push_back(ErrContextAsnItem(&asn_DEF_CurrencyConversionList, i + 1));
 			if (!m_transferBatch->accountingInfo->currencyConversionInfo->list.array[i]->exchangeRateCode) {
 				int createRapRes = CreateAccountingInfoRAPFile(
 					"Mandatory item Exchange Rate Code missing within group Currency Conversion",
 					CURRENCY_CONVERSION_EXRATE_CODE_MISSING, asnItems);
-				return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
+				return (createRapRes >= 0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
 			}
 			if (!m_transferBatch->accountingInfo->currencyConversionInfo->list.array[i]->numberOfDecimalPlaces) {
 				int createRapRes = CreateAccountingInfoRAPFile(
 					"Mandatory item Exchange Rate Code missing within group Currency Conversion",
 					CURRENCY_CONVERSION_NUM_OF_DEC_PLACES_MISSING, asnItems);
-				return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
+				return (createRapRes >= 0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
 			}
 			if (!m_transferBatch->accountingInfo->currencyConversionInfo->list.array[i]->exchangeRate) {
 				int createRapRes = CreateAccountingInfoRAPFile(
 					"Mandatory item Exchange Rate Code missing within group Currency Conversion",
 					CURRENCY_CONVERSION_EXCHANGE_RATE_MISSING, asnItems);
-				return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
+				return (createRapRes >= 0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
 			}
 			// check exchange rate code duplication
 			if (exchangeRates.find(*m_transferBatch->accountingInfo->currencyConversionInfo->list.array[i]->exchangeRateCode) !=
-					exchangeRates.end()) {
+				exchangeRates.end()) {
 				int createRapRes = CreateAccountingInfoRAPFile(
 					"More than one occurrence of group with same Exchange Rate Code within group Currency Conversion",
 					CURRENCY_CONVERSION_EXRATE_CODE_DUPLICATION, asnItems);
-				return ( createRapRes >= 0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE );
+				return (createRapRes >= 0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
 			}
 			else {
-				exchangeRates.insert( pair<ExchangeRateCode_t, double> 
+				exchangeRates.insert(pair<ExchangeRateCode_t, double>
 					(*m_transferBatch->accountingInfo->currencyConversionInfo->list.array[i]->exchangeRateCode,
 					*m_transferBatch->accountingInfo->currencyConversionInfo->list.array[i]->exchangeRate /
 					pow((double)10, *m_transferBatch->accountingInfo->currencyConversionInfo->list.array[i]->numberOfDecimalPlaces)));
 			}
-			ExRateValidationRes validationRes = ValidateExchangeRates(exchangeRates, 
-				(char*) m_transferBatch->accountingInfo->localCurrency->buf);
-			if(validationRes != EXRATE_VALID) {
-				int createRapRes;
-				string logMessage;
-				switch (validationRes) {
-					case EXRATE_HIGHER:
-					case EXRATE_LOWER:
-						createRapRes = CreateAccountingInfoRAPFile(
-							validationRes == EXRATE_HIGHER ?
-								"Exchange Rate higher than expected and applied to one or more Charges" :
-								"Exchange Rate less than expected and applied to one or more Charges",
-							validationRes == EXRATE_HIGHER ?
-								ACCOUNTING_EXCHARGE_RATE_HIGHER :
-								ACCOUNTING_EXCHARGE_RATE_LOWER,
-							asnItems);
-						return (createRapRes >= 0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
-					case EXRATE_WRONG_CODE:
-						logMessage = "Wrong exchange rate code given";
-						break;
-					case EXRATE_CURRENCY_NOT_FOUND:
-						logMessage = string("TAP currency \"") + (char*) m_transferBatch->accountingInfo->localCurrency->buf  + 
-							"\" is not found in IRBiS";
-						break;
-					case EXRATE_CURRENCY_MISMATCH:
-						logMessage = string("IRBiS currency setting for this network differs from \"") + 
-							(char*) m_transferBatch->accountingInfo->localCurrency->buf  + 
-							"\" given in TAP file";
-						break;
-					case EXRATE_NOT_SET:
-						logMessage = string("Exchange rate for \"") + (char*) m_transferBatch->accountingInfo->localCurrency->buf  + 
-							"\" is not set in IRBiS";
-						break;
-					}
-					log(LOG_ERROR, "Could not validate exchange rates, error code " + to_string((long long) validationRes) + " (" + logMessage + ")");
-					return VALIDATION_IMPOSSIBLE;
-			}
+		}
+		ExRateValidationRes validationRes = ValidateExchangeRates(exchangeRates, 
+			(char*) m_transferBatch->accountingInfo->localCurrency->buf);
+		if(validationRes != EXRATE_VALID) {
+			int createRapRes;
+			string logMessage;
+			switch (validationRes) {
+				case EXRATE_HIGHER:
+				case EXRATE_LOWER:
+					createRapRes = CreateAccountingInfoRAPFile(
+						validationRes == EXRATE_HIGHER ?
+							"Exchange Rate higher than expected and applied to one or more Charges" :
+							"Exchange Rate less than expected and applied to one or more Charges",
+						validationRes == EXRATE_HIGHER ?
+							ACCOUNTING_EXCHARGE_RATE_HIGHER :
+							ACCOUNTING_EXCHARGE_RATE_LOWER,
+						asnItems);
+					return (createRapRes >= 0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
+				case EXRATE_WRONG_CODE:
+					logMessage = "Wrong exchange rate code given";
+					break;
+				case EXRATE_CURRENCY_NOT_FOUND:
+					logMessage = string("TAP currency \"") + (char*) m_transferBatch->accountingInfo->localCurrency->buf  + 
+						"\" is not found in IRBiS";
+					break;
+				case EXRATE_CURRENCY_MISMATCH:
+					logMessage = string("IRBiS currency setting for this network differs from \"") + 
+						(char*) m_transferBatch->accountingInfo->localCurrency->buf  + 
+						"\" given in TAP file";
+					break;
+				case EXRATE_NOT_SET:
+					logMessage = string("Exchange rate for \"") + (char*) m_transferBatch->accountingInfo->localCurrency->buf  + 
+						"\" is not set in IRBiS";
+					break;
+				}
+			log(LOG_ERROR, "Could not validate exchange rates, error code " + to_string((long long) validationRes) + " (" + logMessage + ")");
+			return VALIDATION_IMPOSSIBLE;
 		}
 	}
 
