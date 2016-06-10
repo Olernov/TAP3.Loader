@@ -63,7 +63,8 @@ void CallValidator::AddErrorContext(ErrorDetail* errorDetail, int ctxLevel, int 
 }
 
 
-ReturnDetail* CallValidator::CreateReturnDetail(int callIndex, int errorCode)
+ReturnDetail* CallValidator::CreateReturnDetail(int callIndex, int errorCode, 
+	string iotDate, double expectedCharge, string calculation)
 {
 	ReturnDetail* returnDetail = (ReturnDetail*) calloc(1, sizeof(ReturnDetail));
 	returnDetail->present = ReturnDetail_PR_severeReturn;
@@ -111,6 +112,27 @@ ReturnDetail* CallValidator::CreateReturnDetail(int callIndex, int errorCode)
 		break;
 	}
 	ASN_SEQUENCE_ADD(&returnDetail->choice.severeReturn.errorDetail, errorDetail);
+	if (!iotDate.empty()) {
+		iotDate = "IOTDate:" + iotDate;
+		returnDetail->choice.severeReturn.operatorSpecList = (OperatorSpecList*)calloc(1, sizeof(OperatorSpecList));
+		OperatorSpecInformation_t* octetStrIotDate = OCTET_STRING_new_fromBuf(&asn_DEF_OperatorSpecInformation, 
+			iotDate.c_str(), iotDate.size());
+		ASN_SEQUENCE_ADD(returnDetail->choice.severeReturn.operatorSpecList, octetStrIotDate);
+		
+		char strExpectedCharge[100];
+		snprintf(strExpectedCharge, 100, "ExpCharge:%ld", 
+			(long) (expectedCharge * (double) pow((double) 10, *m_transferBatch->accountingInfo->tapDecimalPlaces)));
+		OperatorSpecInformation_t* octetStrExpCharge = OCTET_STRING_new_fromBuf(&asn_DEF_OperatorSpecInformation, 
+			strExpectedCharge, strlen(strExpectedCharge));
+		ASN_SEQUENCE_ADD(returnDetail->choice.severeReturn.operatorSpecList, octetStrExpCharge);
+
+		if(!calculation.empty()) {
+			calculation = "Calculalion:" + calculation;
+			OperatorSpecInformation_t* octetStrCalc = OCTET_STRING_new_fromBuf(&asn_DEF_OperatorSpecInformation, 
+				calculation.c_str(), calculation.size());
+			ASN_SEQUENCE_ADD(returnDetail->choice.severeReturn.operatorSpecList, octetStrCalc);
+		}
+	}
 	return returnDetail;
 }
 
@@ -157,7 +179,8 @@ long CallValidator::ValidateCallIOT(long long eventID, CallTypeForValidation cal
 					(m_transferBatch->batchControlInfo->fileTypeIndicator ?
 					(char*)m_transferBatch->batchControlInfo->fileTypeIndicator->buf : ""));
 			}
-			m_rapFile.AddReturnDetail(CreateReturnDetail(callIndex, CHARGE_NOT_IN_ROAMING_AGREEMENT),
+			m_rapFile.AddReturnDetail(
+				CreateReturnDetail(callIndex, CHARGE_NOT_IN_ROAMING_AGREEMENT, iotDate, expectedCharge, calculation), 
 				CallTotalCharge(callIndex));
 		}
 	}

@@ -1459,7 +1459,7 @@ int LoadRAPSevereReturn(long fileID, const SevereReturn& severeReturn)
 			operSpecInfo = operSpecInfo.substr(0, 1024);
 	}
 	
-	long long eventID;
+	long long eventID; 
 	switch (severeReturn.callEventDetail.present) {
 		case CallEventDetail_PR_mobileOriginatedCall:
 			if ((eventID = ProcessOriginatedCall(fileID, index, &severeReturn.callEventDetail.choice.mobileOriginatedCall)) < 0)
