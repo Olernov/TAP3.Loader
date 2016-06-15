@@ -75,7 +75,7 @@ int RAPFile::Initialize(string tapSender, string tapRecipient, string tapAvailab
 		":pRAPSequenceNum /*char[10],out*/, :pMobileNetworkID /*long,out*/, :pRoamingHubName /*char[100],out*/,"
 		":pTimestamp /*char[20],out*/, :pUTCOffset /*char[10],out*/, :pTAPVersion /*long,out*/, :pTAPRelease /*long,out*/, "
 		":pRAPVersion /*long,out*/, :pRAPRelease /*long,out*/, :pTapDecimalPlaces /*long,out*/)"
-		" into :fileid /*long,out*/" , m_otlConnect);
+		" into :fileid /*long,out*/", m_otlConnect);
 	otlStream
 		<< tapSender
 		<< m_roamingHubID
