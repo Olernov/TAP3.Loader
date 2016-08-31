@@ -495,15 +495,16 @@ long long ProcessOriginatedCall(long fileID, int index, const MobileOriginatedCa
 	otl_nocommit_stream otlStream;	
 	
 	otlStream.open( 1 /*stream buffer size in logical rows*/, 
-		"insert into BILLING.TAP3_CALL (EVENT_ID,FILE_ID,RSN,ORIG_OR_TERM,IMSI,MSISDN,PARTY_NUMBER, DIALLED_DIGITS, THIRD_PARTY, SMS_PARTYNUMBER, \
-			CLIR,PARTY_NETWORK,CALL_TIME,CALL_UTCOFF,DURATION,CAUSE_FOR_TERM,REC_ENTITY,REC_ENTITY_TYPE,\
-			LOCATION_AREA,CELL_ID,SERVING_NETWORK,IMEI, RAP_FILE_SEQNUM ) VALUES (\
-			BILLING.Origin_Seq.NextVal, :hFileID /* long,in */, :hIndex /* int,in */, :hOrigorterm /*short,in*/, :hImsi /* char[20],in */, :hMsisdn  /* char[20],in */, \
-			:hCallednum  /* char[40],in */, :hDialledDigits  /* char[40],in */, :hThirdParty /* char[40],in */, :hSMSDestination /* char[40],in */, \
-			:hClir  /* short,in */, :hPartynetw  /* char[20],in */ , \
-			to_date(:hCalltime  /* char[20],in */,'yyyymmddhh24miss'), :hCall_utc /* char[10],in */,:hDuration  /* long,in */ ,:hCause  /* long,in */,\
-			:hRecentity /* char[30],in */, :hRecentityType /* char[10],in */, :hLocarea /* long,in */, :hCellid /* long,in */, \
-			:hServnetw /* char[20],in */, :hImei /* char[30],in */, :hRAPSeqnum /* char[10],in */) returning EVENT_ID into :hEventId /*bigint,out*/", otlConnect);
+		"insert into BILLING.TAP3_CALL (EVENT_ID,FILE_ID,RSN,ORIG_OR_TERM,IMSI,MSISDN,PARTY_NUMBER, DIALLED_DIGITS, THIRD_PARTY, SMS_PARTYNUMBER, "
+			"CLIR,PARTY_NETWORK,CALL_TIME,CALL_UTCOFF,DURATION,CAUSE_FOR_TERM,REC_ENTITY,REC_ENTITY_TYPE,"
+			"LOCATION_AREA,CELL_ID,SERVING_NETWORK,IMEI, CALL_REFERENCE, RAP_FILE_SEQNUM ) VALUES ("
+			"BILLING.Origin_Seq.NextVal, :hFileID /* long,in */, :hIndex /* int,in */, :hOrigorterm /*short,in*/, :hImsi /* char[20],in */, :hMsisdn  /* char[20],in */, "
+			":hCallednum  /* char[40],in */, :hDialledDigits  /* char[40],in */, :hThirdParty /* char[40],in */, :hSMSDestination /* char[40],in */, "
+			":hClir  /* short,in */, :hPartynetw  /* char[20],in */ , "
+			"to_date(:hCalltime  /* char[20],in */,'yyyymmddhh24miss'), :hCall_utc /* char[10],in */,:hDuration  /* long,in */ ,:hCause  /* long,in */,"
+			":hRecentity /* char[30],in */, :hRecentityType /* char[10],in */, :hLocarea /* long,in */, :hCellid /* long,in */, "
+			":hServnetw /* char[20],in */, :hImei /* char[30],in */, :hCallReference /* bigint,in */, :hRAPSeqnum /* char[10],in */) "
+			"returning EVENT_ID into :hEventId /*bigint,out*/", otlConnect);
 	otlStream 
 		<< fileID
 		<< index 
@@ -552,12 +553,16 @@ long long ProcessOriginatedCall(long fileID, int index, const MobileOriginatedCa
 		otlStream << otl_null();
 
 	otlStream
-		<< (pMCall->locationInformation->geographicalLocation ? ( pMCall->locationInformation->geographicalLocation->servingNetwork ?
-			(const char*) pMCall->locationInformation->geographicalLocation->servingNetwork->buf : "") : "")
-		<< (pMCall->equipmentIdentifier ? ( pMCall->equipmentIdentifier->present == ImeiOrEsn_PR_imei ? BCDString( &pMCall->equipmentIdentifier->choice.imei ) : 
-			(pMCall->equipmentIdentifier->present == ImeiOrEsn_PR_esn ?	BCDString( &pMCall->equipmentIdentifier->choice.esn ) : "")) : "")
-		<< (pMCall->basicCallInformation->rapFileSequenceNumber ? (const char*) pMCall->basicCallInformation->rapFileSequenceNumber->buf : "")
-	;
+		<< (pMCall->locationInformation->geographicalLocation ? (pMCall->locationInformation->geographicalLocation->servingNetwork ?
+			(const char*)pMCall->locationInformation->geographicalLocation->servingNetwork->buf : "") : "")
+		<< (pMCall->equipmentIdentifier ? (pMCall->equipmentIdentifier->present == ImeiOrEsn_PR_imei ? BCDString(&pMCall->equipmentIdentifier->choice.imei) :
+			(pMCall->equipmentIdentifier->present == ImeiOrEsn_PR_esn ? BCDString(&pMCall->equipmentIdentifier->choice.esn) : "")) : "");
+		//<< (pMCall->locationInformation->networkLocation->callReference ? (const char*) pMCall->locationInformation->networkLocation->callReference->buf : "")
+	if (pMCall->locationInformation->networkLocation->callReference)
+		otlStream << OctetStr2Int64(*pMCall->locationInformation->networkLocation->callReference);
+	else
+		otlStream << otl_null();
+	otlStream << (pMCall->basicCallInformation->rapFileSequenceNumber ? (const char*) pMCall->basicCallInformation->rapFileSequenceNumber->buf : "");
 	
 	otlStream.flush();
 	otlStream >> eventID;
@@ -643,15 +648,16 @@ long long ProcessTerminatedCall(long fileID, int index, const MobileTerminatedCa
 	otl_nocommit_stream otlStream;
 	
 	otlStream.open( 1 /*stream buffer size in logical rows*/, 
-		"insert into BILLING.TAP3_CALL (EVENT_ID,FILE_ID,RSN,ORIG_OR_TERM,IMSI,MSISDN,PARTY_NUMBER, SMS_PARTYNUMBER, \
-			CLIR,PARTY_NETWORK,CALL_TIME,CALL_UTCOFF,DURATION,CAUSE_FOR_TERM,REC_ENTITY,REC_ENTITY_TYPE,\
-			LOCATION_AREA,CELL_ID,SERVING_NETWORK,IMEI, RAP_FILE_SEQNUM ) VALUES (\
-			BILLING.Origin_Seq.NextVal, :hFileID /* long,in */, :hIndex /* int,in */, :hOrigorterm /*short,in*/, :hImsi /* char[20],in */, :hMsisdn  /* char[20],in */, \
-			:hCallingnum  /* char[40],in */, :hSMSOrigin /* char[40],in */, \
-			:hClir  /* short,in */, :hPartynetw  /* char[20],in */ , \
-			to_date(:hCalltime  /* char[20],in */,'yyyymmddhh24miss'), :hCall_utc /* char[10],in */,:hDuration  /* long,in */ ,:hCause  /* long,in */,\
-			:hRecentity /* char[30],in */, :hRecentityType /* char[10],in */, :hLocarea /* long,in */, :hCellid /* long,in */, \
-			:hServnetw /* char[20],in */, :hImei /* char[30],in */, :hRAPSeqnum /* char[10],in */) returning EVENT_ID into :hEventId /*bigint,out*/", otlConnect);
+		"insert into BILLING.TAP3_CALL (EVENT_ID,FILE_ID,RSN,ORIG_OR_TERM,IMSI,MSISDN,PARTY_NUMBER, SMS_PARTYNUMBER, "
+			"CLIR,PARTY_NETWORK,CALL_TIME,CALL_UTCOFF,DURATION,CAUSE_FOR_TERM,REC_ENTITY,REC_ENTITY_TYPE,"
+			"LOCATION_AREA,CELL_ID,SERVING_NETWORK,IMEI, CALL_REFERENCE, RAP_FILE_SEQNUM ) VALUES ("
+			"BILLING.Origin_Seq.NextVal, :hFileID /* long,in */, :hIndex /* int,in */, :hOrigorterm /*short,in*/, :hImsi /* char[20],in */, :hMsisdn  /* char[20],in */, "
+			":hCallingnum  /* char[40],in */, :hSMSOrigin /* char[40],in */, "
+			":hClir  /* short,in */, :hPartynetw  /* char[20],in */ , "
+			"to_date(:hCalltime  /* char[20],in */,'yyyymmddhh24miss'), :hCall_utc /* char[10],in */,:hDuration  /* long,in */ ,:hCause  /* long,in */,"
+			":hRecentity /* char[30],in */, :hRecentityType /* char[10],in */, :hLocarea /* long,in */, :hCellid /* long,in */, "
+			":hServnetw /* char[20],in */, :hImei /* char[30],in */, :hCallReference /* bigint,in */, :hRAPSeqnum /* char[10],in */) "
+			"returning EVENT_ID into :hEventId /*bigint,out*/", otlConnect);
 	
 	otlStream 
 		<< fileID
@@ -697,13 +703,16 @@ long long ProcessTerminatedCall(long fileID, int index, const MobileTerminatedCa
 	else
 		otlStream << otl_null();
 
-	otlStream 
-		<< (pMCall->locationInformation->geographicalLocation ? ( pMCall->locationInformation->geographicalLocation->servingNetwork ?
-			(const char*) pMCall->locationInformation->geographicalLocation->servingNetwork->buf : "") : "")
-		<< (pMCall->equipmentIdentifier ?	( pMCall->equipmentIdentifier->present == ImeiOrEsn_PR_imei ? BCDString( &pMCall->equipmentIdentifier->choice.imei ) : 
-			(pMCall->equipmentIdentifier->present == ImeiOrEsn_PR_esn ?	BCDString( &pMCall->equipmentIdentifier->choice.esn ) : "")) : "")
-		<< (pMCall->basicCallInformation->rapFileSequenceNumber ? (const char*) pMCall->basicCallInformation->rapFileSequenceNumber->buf : "")
-	;
+	otlStream
+		<< (pMCall->locationInformation->geographicalLocation ? (pMCall->locationInformation->geographicalLocation->servingNetwork ?
+			(const char*)pMCall->locationInformation->geographicalLocation->servingNetwork->buf : "") : "")
+		<< (pMCall->equipmentIdentifier ? (pMCall->equipmentIdentifier->present == ImeiOrEsn_PR_imei ? BCDString(&pMCall->equipmentIdentifier->choice.imei) :
+			(pMCall->equipmentIdentifier->present == ImeiOrEsn_PR_esn ? BCDString(&pMCall->equipmentIdentifier->choice.esn) : "")) : "");
+	if (pMCall->locationInformation->networkLocation->callReference)
+		otlStream << OctetStr2Int64(*pMCall->locationInformation->networkLocation->callReference);
+	else
+		otlStream << otl_null();
+	otlStream << (pMCall->basicCallInformation->rapFileSequenceNumber ? (const char*) pMCall->basicCallInformation->rapFileSequenceNumber->buf : "");
 	
 	otlStream.flush();
 	otlStream >> eventID;
