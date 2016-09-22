@@ -61,7 +61,7 @@ FileDuplicationCheckRes TAPValidator::IsFileDuplicated()
 			<< m_transferBatch->batchControlInfo->fileSequenceNumber->buf
 			<< ( m_transferBatch->batchControlInfo->fileTypeIndicator ? (char*) m_transferBatch->batchControlInfo->fileTypeIndicator->buf : "" )
 			<< ( m_transferBatch->batchControlInfo->rapFileSequenceNumber ? (char*) m_transferBatch->batchControlInfo->rapFileSequenceNumber->buf : "" )
-			<< (short) 0 /* notification */
+			<< (short) 0 /* transfer batch */
 			 << m_transferBatch->batchControlInfo->fileAvailableTimeStamp->localTimeStamp->buf
 			<< ( m_transferBatch->auditControlInfo->callEventDetailsCount ? *m_transferBatch->auditControlInfo->callEventDetailsCount : 0L )
 			<< OctetStr2Int64(*m_transferBatch->auditControlInfo->totalCharge) / tapPower;
@@ -89,6 +89,53 @@ FileDuplicationCheckRes TAPValidator::IsFileDuplicated()
 		result = DUPLICATION_CHECK_ERROR;
 	}
 	return (FileDuplicationCheckRes) result;
+}
+
+
+IncomingTAPAllowed TAPValidator::IsIncomingTAPAllowed()
+{
+	if (IsTestFile())
+		return INCOMING_TAP_ALLOWED;
+	otl_nocommit_stream otlStream;
+	otlStream.open(1, "call BILLING.TAP3.IsIncomingTAPAllowed("
+		":sender /*long,in*/, :roam_hub_id /*long,in*/, to_date(:avail_stamp /*char[20],in*/,'yyyymmddhh24miss'))"
+		"into :res /*long,out*/", m_otlConnect);
+	if (m_transferBatch) {
+		otlStream
+			<< m_mobileNetworkID
+			<< m_roamingHubID
+			<< m_transferBatch->batchControlInfo->fileAvailableTimeStamp->localTimeStamp->buf;
+	}
+	else {
+		otlStream
+			<< m_mobileNetworkID
+			<< m_roamingHubID
+			<< m_notification->fileAvailableTimeStamp->localTimeStamp->buf;
+	}
+	long result;
+	otlStream >> result;
+	otlStream.close();
+	if(result < 0)
+	{
+		log(LOG_ERROR, "TAP3.IsIncomingTAPAllowed returned error " + to_string((long long) result));
+		result = UNABLE_TO_DETERMINE;
+	}
+	return (IncomingTAPAllowed) result;
+}
+
+bool TAPValidator::IsTestFile()
+{
+	if (m_transferBatch) {
+		if (m_transferBatch->batchControlInfo->fileTypeIndicator) {
+			return !strncmp((char*)m_transferBatch->batchControlInfo->fileTypeIndicator->buf, "T", 1);
+		}
+	}
+	else {
+		if (m_notification->fileTypeIndicator) {
+			return !strncmp((char*)m_notification->fileTypeIndicator->buf, "T", 1);
+		}
+	}
+	return false;
 }
 
 
@@ -1104,7 +1151,9 @@ TAPValidationResult TAPValidator::ValidateNotification()
 		log(LOG_ERROR, "Validation: Recipient " + string((char*) m_notification->recipient->buf) + " is incorrect. ");
 		return VALIDATION_IMPOSSIBLE;
 	}
+
 	
+
 	int fileSeqNum;
 	try {
 		fileSeqNum = stoi((char*) m_notification->fileSequenceNumber->buf, NULL);
@@ -1136,14 +1185,32 @@ TAPValidationResult TAPValidator::Validate(DataInterChange* dataInterchange, lon
 		case DataInterChange_PR_transferBatch:
 			m_transferBatch = &dataInterchange->choice.transferBatch;
 			m_notification = NULL;
-			return ValidateTransferBatch();
+			break;
 		case DataInterChange_PR_notification:
 			m_notification = &dataInterchange->choice.notification;
 			m_transferBatch = NULL;
-			return ValidateNotification();
+			break;
 		default:
 			return VALIDATION_IMPOSSIBLE;
 	}
+	IncomingTAPAllowed tapAllowed = IsIncomingTAPAllowed();
+	switch (tapAllowed) {
+	case INCOMING_TAP_ALLOWED:
+		break;
+	case INCOMING_TAP_NOT_ALLOWED:
+		log(LOG_ERROR, "Validation: Incoming TAP is not allowed for this network. Check "
+			"TRoamingHubAssignment.roamingkind_id setting");
+		return VALIDATION_IMPOSSIBLE;
+	case UNABLE_TO_DETERMINE:
+	default:
+		log(LOG_ERROR, "Validation: Unable to determine is incoming TAP allowed or not for this network. Check "
+			"TRoamingHubAssignment setting.");
+		return VALIDATION_IMPOSSIBLE;
+	}
+	if (m_transferBatch)
+		return ValidateTransferBatch();
+	else
+		return ValidateNotification();
 }
 
 long TAPValidator::GetRapFileID()

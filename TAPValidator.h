@@ -82,6 +82,13 @@ enum FileDuplicationCheckRes
 	DUPLICATION_CHECK_ERROR = -1
 };
 
+enum IncomingTAPAllowed
+{
+	INCOMING_TAP_ALLOWED = 0,
+	INCOMING_TAP_NOT_ALLOWED = 1,
+	UNABLE_TO_DETERMINE = 2
+};
+
 enum ExRateValidationRes
 {
 	EXRATE_VALID					= 0,
@@ -132,7 +139,9 @@ private:
 	string m_rapSequenceNum;
 
 	bool IsRecipientCorrect(string recipient);
+	bool IsTestFile();
 	FileDuplicationCheckRes IsFileDuplicated();
+	IncomingTAPAllowed IsIncomingTAPAllowed();
 	TAPValidationResult FileSequenceNumberControl();
 	bool BatchContainsTaxes();
 	bool BatchContainsDiscounts();
