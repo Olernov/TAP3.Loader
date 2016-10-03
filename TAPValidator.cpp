@@ -59,8 +59,10 @@ FileDuplicationCheckRes TAPValidator::IsFileDuplicated()
 			<< m_transferBatch->batchControlInfo->recipient->buf
 			<< m_roamingHubID
 			<< m_transferBatch->batchControlInfo->fileSequenceNumber->buf
-			<< ( m_transferBatch->batchControlInfo->fileTypeIndicator ? (char*) m_transferBatch->batchControlInfo->fileTypeIndicator->buf : "" )
-			<< ( m_transferBatch->batchControlInfo->rapFileSequenceNumber ? (char*) m_transferBatch->batchControlInfo->rapFileSequenceNumber->buf : "" )
+			<< ( m_transferBatch->batchControlInfo->fileTypeIndicator ? 
+					(char*)m_transferBatch->batchControlInfo->fileTypeIndicator->buf : "" )
+			<< ( m_transferBatch->batchControlInfo->rapFileSequenceNumber ? 
+					(char*) m_transferBatch->batchControlInfo->rapFileSequenceNumber->buf : "" )
 			<< (short) 0 /* transfer batch */
 			 << m_transferBatch->batchControlInfo->fileAvailableTimeStamp->localTimeStamp->buf
 			<< ( m_transferBatch->auditControlInfo->callEventDetailsCount ? *m_transferBatch->auditControlInfo->callEventDetailsCount : 0L )
@@ -85,7 +87,7 @@ FileDuplicationCheckRes TAPValidator::IsFileDuplicated()
 	otlStream.close();
 	if(result < 0)
 	{
-		log(LOG_ERROR, "TAP3.IsTAPFileDuplicated returned error " + to_string((long long) result));
+		log(LOG_ERROR, "Функция TAP3.IsTAPFileDuplicated вернула ошибку " + to_string((long long) result));
 		result = DUPLICATION_CHECK_ERROR;
 	}
 	return (FileDuplicationCheckRes) result;
@@ -117,7 +119,7 @@ IncomingTAPAllowed TAPValidator::IsIncomingTAPAllowed()
 	otlStream.close();
 	if(result < 0)
 	{
-		log(LOG_ERROR, "TAP3.IsIncomingTAPAllowed returned error " + to_string((long long) result));
+		log(LOG_ERROR, "Функция TAP3.IsIncomingTAPAllowed вернула ошибку " + to_string((long long) result));
 		result = UNABLE_TO_DETERMINE;
 	}
 	return (IncomingTAPAllowed) result;
@@ -273,7 +275,7 @@ long long TAPValidator::BatchTotalCharge()
 
 int TAPValidator::CreateBatchControlInfoRAPFile(string logMessage, int errorCode, const vector<ErrContextAsnItem>& asnItems)
 {
-	log(LOG_ERROR, "Validating Batch Control Info: " + logMessage + ". Creating RAP file ");
+	log(LOG_ERROR, "Валидация Batch Control Info: " + logMessage + ". Создание RAP-файла ... ");
 	ReturnDetail* returnDetail = (ReturnDetail*) calloc(1, sizeof(ReturnDetail));
 	returnDetail->present = ReturnDetail_PR_fatalReturn;
 	OCTET_STRING_fromBuf(&returnDetail->choice.fatalReturn.fileSequenceNumber, 
@@ -355,12 +357,13 @@ TAPValidationResult TAPValidator::FileSequenceNumberControl()
 		case DUPLICATION_NOTFOUND:
 			return TAP_VALID;
 		case COPY_FOUND:
-			log(LOG_INFO, "File having same sequence number has already been received and processed. No loading is needed.");
+			log(LOG_INFO, "Файл, имеющий тот же последовательный номер, уже был загружен и обработан. "
+				"Повторной загрузки не требуется.");
 			return FILE_DUPLICATION;
 		case DUPLICATION_FOUND:
 			asnItems.push_back(ErrContextAsnItem(&asn_DEF_FileSequenceNumber, 0));
 			createRapRes = CreateBatchControlInfoRAPFile(
-				"Duplication: File sequence number of the received file has already been received and successfully processed",
+				"Дублирование: Файл, имеющий тот же последовательный номер, уже был загружен и обработан. Создание RAP-файла...",
 				FILE_SEQ_NUM_DUPLICATION, asnItems);
 			return ( createRapRes >= 0 ? FILE_DUPLICATION : VALIDATION_IMPOSSIBLE );
 		case DUPLICATION_CHECK_ERROR:
@@ -373,28 +376,28 @@ TAPValidationResult TAPValidator::ValidateBatchControlInfo()
 {
 	if (!m_transferBatch->batchControlInfo->sender || !m_transferBatch->batchControlInfo->recipient || 
 			!m_transferBatch->batchControlInfo->fileSequenceNumber) {
-		log(LOG_ERROR, "Validation: Sender, Recipient or FileSequenceNumber is missing in Batch Control Info.");
+		log(LOG_ERROR, "Валидация: Sender, Recipient или FileSequenceNumber отсутствуют в Batch Control Info.");
 		return VALIDATION_IMPOSSIBLE;
 	}
 
 	if(!IsRecipientCorrect((char*) m_transferBatch->batchControlInfo->recipient->buf)) {
-		log(LOG_ERROR, "Validation: Recipient " + string((char*) m_transferBatch->batchControlInfo->recipient->buf) + 
-			" is incorrect. File is not addressed for us.");
+		log(LOG_ERROR, "Валидация: Некорректный получатель " + string((char*) m_transferBatch->batchControlInfo->
+			recipient->buf) + " Файл адресован другому получателю.");
 		return VALIDATION_IMPOSSIBLE;
 	}
 
 	if (!m_transferBatch->batchControlInfo->fileAvailableTimeStamp) {
-		int createRapRes = CreateBatchControlInfoRAPFile("fileAvailableTimeStamp is missing in Batch Control Info", 
+		int createRapRes = CreateBatchControlInfoRAPFile("fileAvailableTimeStamp отсутствует в Batch Control Info", 
 			BATCH_CTRL_FILE_AVAIL_TIMESTAMP_MISSING, NO_ASN_ITEMS);
 		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
 	}
 	if (!m_transferBatch->batchControlInfo->specificationVersionNumber) {
-		int createRapRes = CreateBatchControlInfoRAPFile("specificationVersionNumber is missing in Batch Control Info", 
+		int createRapRes = CreateBatchControlInfoRAPFile("specificationVersionNumber отсутствует в Batch Control Info", 
 			BATCH_CTRL_SPEC_VERSION_MISSING, NO_ASN_ITEMS);
 		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
 	}
 	if (!m_transferBatch->batchControlInfo->transferCutOffTimeStamp) {
-		int createRapRes = CreateBatchControlInfoRAPFile("transferCutOffTimeStamp is missing in Batch Control Info", 
+		int createRapRes = CreateBatchControlInfoRAPFile("transferCutOffTimeStamp отсутствует в Batch Control Info", 
 			BATCH_CTRL_TRANSFER_CUTOFF_MISSING, NO_ASN_ITEMS);
 		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
 	}
@@ -407,7 +410,7 @@ TAPValidationResult TAPValidator::ValidateBatchControlInfo()
 		// wrong file sequence number given
 		vector<ErrContextAsnItem> asnItems;
 		asnItems.push_back(ErrContextAsnItem(&asn_DEF_FileSequenceNumber, 0));
-		int createRapRes = CreateBatchControlInfoRAPFile("fileSequenceNumber is not a number (syntax error)", 
+		int createRapRes = CreateBatchControlInfoRAPFile("Указан нечисловой fileSequenceNumber", 
 			FILE_SEQ_NUM_SYNTAX_ERROR, asnItems);
 		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
 	}
@@ -415,7 +418,7 @@ TAPValidationResult TAPValidator::ValidateBatchControlInfo()
 	if (!(fileSeqNum >= START_TAP_SEQUENCE_NUM && fileSeqNum <= END_TAP_SEQUENCE_NUM)) {
 		vector<ErrContextAsnItem> asnItems;
 		asnItems.push_back(ErrContextAsnItem(&asn_DEF_FileSequenceNumber, 0));
-		int createRapRes = CreateBatchControlInfoRAPFile("fileSequenceNumber is out of range", 
+		int createRapRes = CreateBatchControlInfoRAPFile("fileSequenceNumber вне допустимого диапазона", 
 			FILE_SEQ_NUM_OUT_OF_RANGE, asnItems);
 		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
 	}
@@ -426,7 +429,7 @@ TAPValidationResult TAPValidator::ValidateBatchControlInfo()
 
 int TAPValidator::CreateAccountingInfoRAPFile(string logMessage, int errorCode, const vector<ErrContextAsnItem>& asnItems)
 {
-	log(LOG_ERROR, "Validating Accounting Info: " + logMessage + ". Creating RAP file");
+	log(LOG_ERROR, "Валидация Accounting Info: " + logMessage + ". Создание RAP-файла ...");
 	ReturnDetail* returnDetail = (ReturnDetail*) calloc(1, sizeof(ReturnDetail));
 	returnDetail->present = ReturnDetail_PR_fatalReturn;
 	OCTET_STRING_fromBuf(&returnDetail->choice.fatalReturn.fileSequenceNumber, (const char*) m_transferBatch->batchControlInfo->fileSequenceNumber->buf, 
@@ -680,7 +683,8 @@ TAPValidationResult TAPValidator::ValidateAccountingInfo()
 						"\" is not set in IRBiS";
 					break;
 				}
-			log(LOG_ERROR, "Could not validate exchange rates, error code " + to_string((long long) validationRes) + " (" + logMessage + ")");
+			log(LOG_ERROR, "Невозможно проверить курсы обмена валют, код ошибки " + to_string((long long) validationRes) +
+				" (" + logMessage + ")");
 			return VALIDATION_IMPOSSIBLE;
 		}
 	}
@@ -755,7 +759,7 @@ TAPValidationResult TAPValidator::ValidateAccountingInfo()
 
 int TAPValidator::CreateNetworkInfoRAPFile(string logMessage, int errorCode, const vector<ErrContextAsnItem>& asnItems)
 {
-	log(LOG_ERROR, "Validating Network Info: " + logMessage + ". Creating RAP file");
+	log(LOG_ERROR, "Валидация Network Info: " + logMessage + ". Создание RAP-файла ...");
 	ReturnDetail* returnDetail = (ReturnDetail*) calloc(1, sizeof(ReturnDetail));
 	returnDetail->present = ReturnDetail_PR_fatalReturn;
 	OCTET_STRING_fromBuf(&returnDetail->choice.fatalReturn.fileSequenceNumber, (const char*) m_transferBatch->batchControlInfo->fileSequenceNumber->buf, 
@@ -876,7 +880,7 @@ TAPValidationResult TAPValidator::ValidateNetworkInfo()
 
 int TAPValidator::CreateAuditControlInfoRAPFile(string logMessage, int errorCode, const vector<ErrContextAsnItem>& asnItems)
 {
-	log(LOG_ERROR, "Validating Audit Control Info: " + logMessage + ". Creating RAP file");
+	log(LOG_ERROR, "Валидация Audit Control Info: " + logMessage + ". Создание RAP-файла ...");
 	ReturnDetail* returnDetail = (ReturnDetail*) calloc(1, sizeof(ReturnDetail));
 	returnDetail->present = ReturnDetail_PR_fatalReturn;
 	OCTET_STRING_fromBuf(&returnDetail->choice.fatalReturn.fileSequenceNumber, (const char*) m_transferBatch->batchControlInfo->fileSequenceNumber->buf, 
@@ -997,7 +1001,7 @@ TAPValidationResult TAPValidator::ValidateAuditControlInfo()
 
 int TAPValidator::CreateTransferBatchRAPFile(string logMessage, int errorCode)
 {
-	log(LOG_ERROR, "Validating Transfer Batch: " + logMessage + ". Creating RAP file");
+	log(LOG_ERROR, "Валидация Transfer Batch: " + logMessage + ". Создание RAP-файла ...");
 	ReturnDetail* returnDetail = (ReturnDetail*) calloc(1, sizeof(ReturnDetail));
 	returnDetail->present = ReturnDetail_PR_fatalReturn;
 	OCTET_STRING_fromBuf(&returnDetail->choice.fatalReturn.fileSequenceNumber, (const char*)m_transferBatch->batchControlInfo->fileSequenceNumber->buf, 
@@ -1087,7 +1091,7 @@ TAPValidationResult TAPValidator::ValidateTransferBatch()
 
 int TAPValidator::CreateNotificationRAPFile(string logMessage, int errorCode, const vector<ErrContextAsnItem>& asnItems)
 {
-	log(LOG_ERROR, "Validating Notification: " + logMessage + ". Creating RAP file");
+	log(LOG_ERROR, "Валидация Notification: " + logMessage + ". Создание RAP-файла ...");
 	ReturnDetail* returnDetail = (ReturnDetail*) calloc(1, sizeof(ReturnDetail));
 	returnDetail->present = ReturnDetail_PR_fatalReturn;
 	OCTET_STRING_fromBuf(&returnDetail->choice.fatalReturn.fileSequenceNumber, (const char*) m_notification->fileSequenceNumber->buf, 
@@ -1143,12 +1147,12 @@ TAPValidationResult TAPValidator::ValidateNotification()
 	assert(m_notification);
 	assert(!m_transferBatch);
 	if (!m_notification->sender || !m_notification->recipient || !m_notification->fileSequenceNumber) {
-		log(LOG_ERROR, "Validation: Sender, Recipient or FileSequenceNumber is missing in Notification. ");
+		log(LOG_ERROR, "Валидация: Sender, Recipient либо FileSequenceNumber отсутствует в Notification. ");
 		return VALIDATION_IMPOSSIBLE;
 	}
 
 	if(!IsRecipientCorrect((char*) m_notification->recipient->buf)) {
-		log(LOG_ERROR, "Validation: Recipient " + string((char*) m_notification->recipient->buf) + " is incorrect. ");
+		log(LOG_ERROR, "Валидация: некорректный получатель " + string((char*) m_notification->recipient->buf));
 		return VALIDATION_IMPOSSIBLE;
 	}
 
@@ -1162,14 +1166,14 @@ TAPValidationResult TAPValidator::ValidateNotification()
 		// wrong file sequence number given
 		vector<ErrContextAsnItem> asnItems;
 		asnItems.push_back(ErrContextAsnItem(&asn_DEF_FileSequenceNumber, 0));
-		int createRapRes = CreateNotificationRAPFile("fileSequenceNumber is not a number (syntax error)", 
+		int createRapRes = CreateNotificationRAPFile("В файле указан нечисловой fileSequenceNumber", 
 			FILE_SEQ_NUM_SYNTAX_ERROR, asnItems);
 		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
 	}
 	if (!(fileSeqNum >= START_TAP_SEQUENCE_NUM && fileSeqNum <= END_TAP_SEQUENCE_NUM)) {
 		vector<ErrContextAsnItem> asnItems;
 		asnItems.push_back(ErrContextAsnItem(&asn_DEF_FileSequenceNumber, 0));
-		int createRapRes = CreateNotificationRAPFile("fileSequenceNumber is out of range", 
+		int createRapRes = CreateNotificationRAPFile("fileSequenceNumber вне допустимого диапазона", 
 			FILE_SEQ_NUM_OUT_OF_RANGE, asnItems);
 		return (createRapRes >=0 ? FATAL_ERROR : VALIDATION_IMPOSSIBLE);
 	}
@@ -1198,13 +1202,14 @@ TAPValidationResult TAPValidator::Validate(DataInterChange* dataInterchange, lon
 	case INCOMING_TAP_ALLOWED:
 		break;
 	case INCOMING_TAP_NOT_ALLOWED:
-		log(LOG_ERROR, "Validation: Incoming TAP is not allowed for this network. Check "
-			"TRoamingHubAssignment.roamingkind_id setting");
+		log(LOG_ERROR, "Валидация: Входящие TAP-файлы не разрешены для данной сети. Проверьте настройку поля "
+			"\"Вид роуминга\" в справочнике \"Привязка к роуминговому координатору\".");
 		return VALIDATION_IMPOSSIBLE;
 	case UNABLE_TO_DETERMINE:
 	default:
-		log(LOG_ERROR, "Validation: Unable to determine is incoming TAP allowed or not for this network. Check "
-			"TRoamingHubAssignment setting.");
+		log(LOG_ERROR, "Валидация: Невозможно определить, разрешены или нет входящие TAP-файлы для данной сети."
+			" Проверьте настройки справочника \"Привязка к роуминговому координатору\". Возможно, сеть привязана"
+			" к одному координатору, а файлы поступают от другого.");
 		return VALIDATION_IMPOSSIBLE;
 	}
 	if (m_transferBatch)

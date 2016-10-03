@@ -348,7 +348,7 @@ long ProcessChrInfo(long long eventID, ChargeInformation* chargeInformation, cha
 	// проверка наличия обязательных структур в Charge Information
 	if(!chargeInformation->chargedItem || /*!chargeInformation->exchangeRateCode ||*/ !chargeInformation->chargeDetailList)
 	{
-		log( LOG_ERROR, "Some mandatory structures are missing in Charge Information. " + string(szInfo));
+		log( LOG_ERROR, "Обязательные структуры данных отсутствуют в Charge Information. " + string(szInfo));
 		return TL_MISSINGSTRUCT;
 	}
 
@@ -356,7 +356,8 @@ long ProcessChrInfo(long long eventID, ChargeInformation* chargeInformation, cha
 	if(chargeInformation->callTypeGroup &&
 		(!chargeInformation->callTypeGroup->callTypeLevel1 || !chargeInformation->callTypeGroup->callTypeLevel2 || !chargeInformation->callTypeGroup->callTypeLevel3))
 	{
-		log( LOG_ERROR, "Some mandatory structures are missing in Charge Information/Call Type Group. " + string(szInfo));
+		log( LOG_ERROR, "Обязательные структуры данных отсутствуют в Charge Information/Call Type Group. " + 
+			string(szInfo));
 		return TL_MISSINGSTRUCT;
 	}
 
@@ -470,14 +471,16 @@ long long ProcessOriginatedCall(long fileID, int index, const MobileOriginatedCa
 	// проверка наличия обязательных структур в Mobile Originated Call
 	if(!pMCall->basicCallInformation || !pMCall->locationInformation || !pMCall->basicServiceUsedList)
 	{
-		log( LOG_ERROR, "Some mandatory structures are missing in Mobile Originated Call. Call number " + to_string( static_cast<unsigned long long> (index)));
+		log( LOG_ERROR, "Обязательные структуры данных отсутствуют в Mobile Originated Call. Номер звонка " + 
+			to_string( static_cast<unsigned long long> (index)));
 		return TL_MISSINGSTRUCT;
 	}
 	// проверка наличия обязательных структур в Mobile Originated Call/MO Basic Call Information
 	if(!pMCall->basicCallInformation->chargeableSubscriber || !pMCall->basicCallInformation->callEventStartTimeStamp ||
 		!pMCall->basicCallInformation->totalCallEventDuration || !pMCall->basicCallInformation->callEventStartTimeStamp)
 	{
-		log( LOG_ERROR, "Some mandatory structures are missing in Mobile Originated Call/MO Basic Call Information. Call number " + to_string( static_cast<unsigned long long> (index)));
+		log( LOG_ERROR, "Обязательные структуры данных отсутствуют в Mobile Originated Call/"
+			"MO Basic Call Information. Номер звонка" + to_string( static_cast<unsigned long long> (index)));
 		return TL_MISSINGSTRUCT;
 	}
 
@@ -485,7 +488,8 @@ long long ProcessOriginatedCall(long fileID, int index, const MobileOriginatedCa
 	if(!pMCall->locationInformation->networkLocation  ||
 		!pMCall->locationInformation->networkLocation->recEntityCode)
 	{
-		log( LOG_ERROR, "Some mandatory structures are missing in Mobile Originated Call/MO Basic Call Information. Call number " + to_string( static_cast<unsigned long long> (index)));
+		log( LOG_ERROR, "Обязательные структуры данных отсутствуют в Mobile Originated Call/"
+			"MO Basic Call Information. Номер звонка " + to_string( static_cast<unsigned long long> (index)));
 		return TL_MISSINGSTRUCT;
 	}
 
@@ -577,7 +581,8 @@ long long ProcessOriginatedCall(long fileID, int index, const MobileOriginatedCa
 		if(!pMCall->basicServiceUsedList->list.array[bs_ind]->basicService || !pMCall->basicServiceUsedList->list.array[bs_ind]->chargeInformationList ||
 			!pMCall->basicServiceUsedList->list.array[bs_ind]->basicService->serviceCode)
 		{
-			log( LOG_ERROR, "Some mandatory structures are missing in Mobile Originated Call/Basic Service Used. Call number " + to_string( static_cast<unsigned long long> (index)));
+			log( LOG_ERROR, "Обязательные структуры данных отсутствуют в Mobile Originated Call/"
+				"Basic Service Used. Номер звонка " + to_string( static_cast<unsigned long long> (index)));
 			return TL_MISSINGSTRUCT;
 		}
 		
@@ -623,14 +628,16 @@ long long ProcessTerminatedCall(long fileID, int index, const MobileTerminatedCa
 	// проверка наличия обязательных структур в Mobile Terminated Call
 	if(!pMCall->basicCallInformation || !pMCall->locationInformation || !pMCall->basicServiceUsedList)
 	{
-		log( LOG_ERROR, "Some mandatory structures are missing in Mobile Terminated Call. Call number " + to_string( static_cast<unsigned long long> (index)));
+		log( LOG_ERROR, "Обязательные структуры данных отсутствуют в Mobile Terminated Call. Номер звонка " + 
+			to_string( static_cast<unsigned long long> (index)));
 		return TL_MISSINGSTRUCT;
 	}
 	// проверка наличия обязательных структур в Mobile Terminated Call/MT Basic Call Information
 	if(!pMCall->basicCallInformation->chargeableSubscriber || !pMCall->basicCallInformation->callEventStartTimeStamp ||
 		!pMCall->basicCallInformation->totalCallEventDuration || !pMCall->basicCallInformation->callEventStartTimeStamp)
 	{
-		log( LOG_ERROR, "Some mandatory structures are missing in Mobile Terminated Call/MT Basic Call Information. Call number " + to_string( static_cast<unsigned long long> (index)));
+		log( LOG_ERROR, "Обязательные структуры данных отсутствуют в Mobile Terminated Call/"
+			"MT Basic Call Information. Номер звонка " + to_string( static_cast<unsigned long long> (index)));
 		return TL_MISSINGSTRUCT;
 	}
 
@@ -638,7 +645,8 @@ long long ProcessTerminatedCall(long fileID, int index, const MobileTerminatedCa
 	if(!pMCall->locationInformation->networkLocation  ||
 		!pMCall->locationInformation->networkLocation->recEntityCode)
 	{
-		log( LOG_ERROR, "Some mandatory structures are missing in Mobile Terminated Call/Location Information. Call number " + to_string( static_cast<unsigned long long> (index)));
+		log( LOG_ERROR, "Обязательные структуры данных отсутствуют в Mobile Terminated Call/"
+			"Location Information. Номер звонка " + to_string( static_cast<unsigned long long> (index)));
 		return TL_MISSINGSTRUCT;
 	}
 
@@ -727,7 +735,8 @@ long long ProcessTerminatedCall(long fileID, int index, const MobileTerminatedCa
 		if(!pMCall->basicServiceUsedList->list.array[bs_ind]->basicService || !pMCall->basicServiceUsedList->list.array[bs_ind]->chargeInformationList ||
 			!pMCall->basicServiceUsedList->list.array[bs_ind]->basicService->serviceCode)
 		{
-			log( LOG_ERROR, "Some mandatory structures are missing in Mobile Terminated Call/Basic Service Used. Call number " + to_string( static_cast<unsigned long long> (index)));
+			log( LOG_ERROR, "Обязательные структуры данных отсутствуют в Mobile Terminated Call/"
+				"Basic Service Used. Номер звонка " + to_string( static_cast<unsigned long long> (index)));
 			return TL_MISSINGSTRUCT;
 		}
 		
@@ -774,21 +783,23 @@ long long ProcessGPRSCall(long fileID, int index, const GprsCall* pMCall)
 	// проверка наличия обязательных структур в Mobile Terminated Call
 	if(!pMCall->gprsBasicCallInformation|| !pMCall->gprsLocationInformation || !pMCall->gprsServiceUsed)
 	{
-		log( LOG_ERROR, "Some mandatory structures are missing in GPRS Call. Call number " + to_string( static_cast<unsigned long long> (index)));
+		log( LOG_ERROR, "Обязательные структуры данных отсутствуют в GPRS Call. Номер звонка " + to_string( static_cast<unsigned long long> (index)));
 		return TL_MISSINGSTRUCT;
 	}
 	// проверка наличия обязательных структур в Mobile Terminated Call/MT Basic Call Information
 	if(!pMCall->gprsBasicCallInformation->gprsChargeableSubscriber || !pMCall->gprsBasicCallInformation->gprsDestination || !pMCall->gprsBasicCallInformation->callEventStartTimeStamp ||
 		!pMCall->gprsBasicCallInformation->totalCallEventDuration || !pMCall->gprsBasicCallInformation->chargingId)
 	{
-		log( LOG_ERROR, "Some mandatory structures are missing in GPRS Call/GPRS Basic Call Information. Call number " + to_string( static_cast<unsigned long long> (index)));
+		log( LOG_ERROR, "Обязательные структуры данных отсутствуют в GPRS Call/"
+			"GPRS Basic Call Information. Номер звонка " + to_string( static_cast<unsigned long long> (index)));
 		return TL_MISSINGSTRUCT;
 	}
 
 	// проверка наличия обязательных структур в Mobile Terminated Call/Location Information
 	if(!pMCall->gprsLocationInformation->gprsNetworkLocation  || !pMCall->gprsLocationInformation->gprsNetworkLocation->recEntity)
 	{
-		log( LOG_ERROR, "Some mandatory structures are missing in GPRS Call/GPRS Location Information. Call number " + to_string( static_cast<unsigned long long> (index)));
+		log( LOG_ERROR, "Обязательные структуры данных отсутствуют в GPRS Call/"
+			"GPRS Location Information. Номер звонка " + to_string( static_cast<unsigned long long> (index)));
 		return TL_MISSINGSTRUCT;
 	}
 
@@ -972,11 +983,8 @@ void Finalize(bool bSuccess = false)
 		otlConnect.logoff();
 	}
 
-	/*if( otlLogConnect.connected ) {
-		log( bSuccess? LOG_INFO : LOG_ERROR, bSuccess ? "---------- TAP3 loader finished successfully --------------" : "---------- TAP3 loader finished with errors --------------");*/
-		otlLogConnect.commit();
-		otlLogConnect.logoff();
-	//}
+	otlLogConnect.commit();
+	otlLogConnect.logoff();
 
 	if(ofsLog.is_open()) ofsLog.close();
 	if (buffer ) delete [] buffer;
@@ -1027,16 +1035,16 @@ int LoadTAPEventsToDB(long fileID, long iotValidationMode, long roamingHubID)
 			break;
 		default:
 			if (!debugMode) {
-				log(pShortName, LOG_ERROR, string("No handler for call event detail type=") + 
+				log(pShortName, LOG_ERROR, string("Не найден обработчик события с кодом ") + 
 					to_string( static_cast<unsigned long long> (dataInterchange->choice.transferBatch.callEventDetails->list.array[index-1]->present)) +
-					string(". Call number=") + to_string(static_cast<unsigned long long> (index+1)));
+					string(". Номер звонка ") + to_string(static_cast<unsigned long long> (index+1)));
 				return TL_NEWCOMPONENT;
 			}
 		}
 	}
 	RAPFile& rapFile = callValidator.GetRAPFile();
 	if (rapFile.Created()) {
-		log(pShortName, LOG_ERROR, "Some IOT validation errors detected.");
+		log(pShortName, LOG_ERROR, "Обнаружены ошибки валидации IOT.");
 		rapFile.Finalize();
 		rapFile.LoadToDB();
 		int writeRes = rapFile.EncodeAndUpload();
@@ -1056,7 +1064,8 @@ int LoadTAPFileToDB( unsigned char* buffer, long dataLen, long fileID, long roam
 		rval = ber_decode(0, &asn_DEF_DataInterChange, (void**) &dataInterchange, buffer, dataLen);
 
 		if(rval.code != RC_OK) {
-			log( LOG_ERROR, string("Error while decoding ASN file. Error code ") + to_string( static_cast<unsigned long long> (rval.code)));
+			log( LOG_ERROR, string("Ошибка ASN-декодирования файла. Код ошибки ") + 
+				to_string( static_cast<unsigned long long> (rval.code)));
 			Finalize();
 			return TL_DECODEERROR;
 		}
@@ -1071,7 +1080,7 @@ int LoadTAPFileToDB( unsigned char* buffer, long dataLen, long fileID, long roam
 			}
 			else
 			{
-				printf("Unable to open output file %s\n", printName);
+				printf("Невозможно открыть файл %s\n", printName);
 			}
 			delete [] printName;
 			printf("---- File contents printed to output file. Exiting. -------");
@@ -1081,13 +1090,14 @@ int LoadTAPFileToDB( unsigned char* buffer, long dataLen, long fileID, long roam
 		long iotValidationMode;
 		long mobileNetworkID = GetSenderNetworkID(iotValidationMode);
 		if(mobileNetworkID < 0 ) {
-			log(LOG_ERROR, "Unable to determine sender network. File is not loaded.");
+			log(LOG_ERROR, "Невозможно найти в базе сеть отправителя по TAP-коду. Проверьте корректность "
+				"ее заведения. Файл не был загружен.");
 			return TL_UNKNOWN_SENDER;
 		}
 		TAPValidator tapValidator(otlConnect, config);
 		TAPValidationResult validationRes = tapValidator.Validate(dataInterchange, mobileNetworkID, roamingHubID);
 		if (validationRes == VALIDATION_IMPOSSIBLE) {
-			log(LOG_ERROR, "Unable to validate TAP file. File is not loaded.");
+			log(LOG_ERROR, "Невозможно провести валидацию TAP-файла. Файл не был загружен."); //"Unable to validate TAP file. File is not loaded.");
 			return TL_TAP_NOT_VALIDATED;
 		}
 		else if (validationRes == FILE_DUPLICATION) {
@@ -1253,7 +1263,7 @@ int LoadTAPFileToDB( unsigned char* buffer, long dataLen, long fileID, long roam
 	}
 	catch (otl_exception &otlEx) {
 		otlConnect.rollback();
-		log(pShortName,  LOG_ERROR, "DB error while processing CDR records:");
+		log(pShortName,  LOG_ERROR, "Ошибка базы данных:");
 		log(pShortName,  LOG_ERROR, (char*) otlEx.msg);
 		if( strlen(otlEx.stm_text) > 0 )
 			log(pShortName,  LOG_ERROR, (char*) otlEx.stm_text ); // log SQL that caused the error
@@ -1264,7 +1274,7 @@ int LoadTAPFileToDB( unsigned char* buffer, long dataLen, long fileID, long roam
 	
 	catch(char* pMess)
 	{
-		log(pShortName, LOG_ERROR, string("Exception caught: ") + string(pMess) + string(". Call number=") + to_string( static_cast<unsigned long long> (index)));
+		log(pShortName, LOG_ERROR, string("Исключение: ") + string(pMess) + string(". Номер звонка ") + to_string( static_cast<unsigned long long> (index)));
 		return TL_WRONGCODE;
 	}
 	return TL_OK;
@@ -1349,9 +1359,11 @@ int LoadRAPErrorDetailList(const ErrorDetailList_t* pErrDetailList, long returnI
 			}
 
 			if (!elm) {
-				log(LOG_ERROR, "Error parsing Path Item IDs at error context #" + to_string((long long)context + 1) + " for detail #" + to_string((long long)detail + 1));
-				log(LOG_ERROR, "ASN Tag " + to_string((long long) pErrDetailList->list.array[detail]->errorContext->list.array[context]->pathItemId)
-					+ " not found in ASN type " + type_descriptor->name);
+				log(LOG_ERROR, "Ошибка разбора Path Item IDs в error context #" + to_string((long long)context + 1) +
+					" для detail #" + to_string((long long)detail + 1));
+				log(LOG_ERROR, "ASN-тэг " + to_string((long long) pErrDetailList->list.array[detail]->errorContext->
+						list.array[context]->pathItemId)
+					+ " не найден в ASN типе " + type_descriptor->name);
 
 				return TL_DECODEERROR;
 			}
@@ -1491,8 +1503,9 @@ int LoadRAPSevereReturn(long fileID, const SevereReturn& severeReturn)
 			break;
 		default:
 			if (!debugMode) {
-				log(LOG_ERROR, string("No handler for call event detail type=") + to_string(static_cast<unsigned long long> (dataInterchange->choice.transferBatch.callEventDetails->list.array[index - 1]->present)) +
-					string(". Call number=") + to_string(static_cast<unsigned long long> (index)));
+				log(LOG_ERROR, string("Не найден обработчик для ") + to_string(static_cast<unsigned long long> 
+						(dataInterchange->choice.transferBatch.callEventDetails->list.array[index - 1]->present)) +
+					string(". Номер звонка ") + to_string(static_cast<unsigned long long> (index)));
 				return TL_NEWCOMPONENT;
 			}
 	}
@@ -1610,7 +1623,8 @@ int LoadReturnBatchToDB(ReturnBatch* returnBatch, long fileID, long roamingHubID
 				loadResult = LoadRAPSevereReturn(fileID, returnBatch->returnDetails.list.array[i]->choice.severeReturn);
 				break;
 			default:
-				log(LOG_ERROR, "Unknown return detail structure: " + to_string(static_cast<unsigned long long> (returnBatch->returnDetails.list.array[i]->present)));
+				log(LOG_ERROR, "Неизвестная структура Return Detail: " + to_string(static_cast<unsigned long long> 
+					(returnBatch->returnDetails.list.array[i]->present)));
 				return TL_DECODEERROR;
 			}
 
@@ -1620,7 +1634,7 @@ int LoadReturnBatchToDB(ReturnBatch* returnBatch, long fileID, long roamingHubID
 	}
 	catch (otl_exception &otlEx) {
 		otlConnect.rollback();
-		log( LOG_ERROR, "DB error while processing CDR records:");
+		log( LOG_ERROR, "Ошибка базы данных:");
 		log( LOG_ERROR, (char*) otlEx.msg);
 		if( strlen(otlEx.stm_text) > 0 )
 			log( LOG_ERROR, (char*) otlEx.stm_text ); // log SQL that caused the error
@@ -1642,7 +1656,8 @@ int LoadRAPFileToDB( unsigned char* buffer, long dataLen, long fileID, long roam
 		rval = ber_decode(0, &asn_DEF_ReturnBatch, (void**) &returnBatch, buffer, dataLen);
 
 		if (rval.code != RC_OK) {
-			log(LOG_ERROR, string("Error while decoding ASN file. Error code ") + to_string(static_cast<unsigned long long> ( rval.code )));
+			log(LOG_ERROR, string("Ошибка ASN-декодирования файла. Код ошибки ") + to_string(
+				static_cast<unsigned long long> ( rval.code )));
 			Finalize();
 			return TL_DECODEERROR;
 		}
@@ -1668,7 +1683,7 @@ int LoadRAPFileToDB( unsigned char* buffer, long dataLen, long fileID, long roam
 	}
 	catch(char* pMess)
 	{
-		log(LOG_ERROR, string("Exception caught: ") + string(pMess) + string(". Call number=") + to_string(static_cast<unsigned long long> (index)));
+		log(LOG_ERROR, string("Исключение: ") + string(pMess) + string(". Номер звонка ") + to_string(static_cast<unsigned long long> (index)));
 		return TL_WRONGCODE;
 	}
 	return TL_OK;
@@ -1683,7 +1698,8 @@ int LoadRAPAckToDB(unsigned char* buffer, long dataLen, long fileID, long roamin
 	rval = ber_decode(0, &asn_DEF_Acknowledgement, (void**)& acknowledgement, buffer, dataLen);
 
 	if (rval.code != RC_OK) {
-		log(LOG_ERROR, string("Error while decoding ASN file. Error code ") + to_string(static_cast<unsigned long long> (rval.code)));
+		log(LOG_ERROR, string("Ошибка ASN-декодирования файла. Код ошибки ") + to_string(
+			static_cast<unsigned long long> (rval.code)));
 		Finalize();
 		return TL_DECODEERROR;
 	}
@@ -1708,7 +1724,7 @@ int LoadRAPAckToDB(unsigned char* buffer, long dataLen, long fileID, long roamin
 	// We do not load RAP ack to DB, just log it and then update RAP file STATUS and ACK_RECEIVED fields
 	log(LOG_INFO, string("Sender: ") + (char*)acknowledgement->sender.buf + ", Recipient: " + (char*)acknowledgement->recipient.buf + 
 				", RAP file seqnum: " + (char*)acknowledgement->rapFileSequenceNumber.buf);
-	log(LOG_INFO, string("Ack file creation: ") + (char*)acknowledgement->ackFileCreationTimeStamp.localTimeStamp->buf + 
+	log(LOG_INFO, string("Создание ack-файла: ") + (char*)acknowledgement->ackFileCreationTimeStamp.localTimeStamp->buf + 
 					", Ack file creation UTC: " + (char*)acknowledgement->ackFileCreationTimeStamp.utcTimeOffset->buf +
 					", Ack file available: " + (char*)acknowledgement->ackFileAvailableTimeStamp.localTimeStamp->buf +
 					", Ack file available UTC: " + (char*)acknowledgement->ackFileAvailableTimeStamp.utcTimeOffset->buf
@@ -1731,7 +1747,7 @@ int LoadRAPAckToDB(unsigned char* buffer, long dataLen, long fileID, long roamin
 	}
 	catch (otl_exception &otlEx) {
 		otlConnect.rollback();
-		log(LOG_ERROR, "DB error while processing acknowledgement file:");
+		log(LOG_ERROR, "Ошибка базы данных:");
 		log(LOG_ERROR, (char*)otlEx.msg);
 		if (strlen(otlEx.stm_text) > 0)
 			log(LOG_ERROR, (char*)otlEx.stm_text); // log SQL that caused the error
@@ -1764,13 +1780,13 @@ int main(int argc, const char* argv[])
 
 	long fileID = strtol(argv[2], NULL, 10);
 	if( fileID == 0 ) {
-		log( LOG_ERROR, string("Wrong value of fileID given in 2nd parameter: ") + argv[2] );
+		log( LOG_ERROR, string("Неверное значение fileID передано во 2-ом аргументе: ") + argv[2] );
 		return TL_FILEERROR ;
 	}
 
 	long roamingHubID = strtol(argv[3], NULL, 10);
 	if( roamingHubID == 0 ) {
-		log( LOG_ERROR, string("Wrong value of roamingHubID given in 3nd parameter: ") + argv[3] );
+		log( LOG_ERROR, string("Неверное значение roamingHubID передано во 3-ем аргументе: ") + argv[3] );
 		return TL_FILEERROR ;
 	}
 
@@ -1783,7 +1799,8 @@ int main(int argc, const char* argv[])
 	else if( !strnicmp(pShortName, "AC", 2) || !strnicmp(pShortName, "AT", 2) )
 		fileType = ftRAPAcknowledgement;
 	else {
-		log(LOG_ERROR, string("Unknown type of TAP file. First letters of filename must be CD, TD, RC, RT, AC or AT. Given filename is ") + argv[1]);
+		log(LOG_ERROR, string("Неизвестный тип TAP-файла. Первые буквы имени файла должы быть CD, TD, RC, RT, AC "
+			" или AT. Для разбора же передан файл ") + argv[1]);
 		Finalize();
 		return TL_FILEERROR;
 	}
@@ -1794,7 +1811,7 @@ int main(int argc, const char* argv[])
 		const char* configFilename = strlen(argv[4]) > 0 ? argv[4] : "TAP3Loader.cfg";
 		ifstream ifsSettings(configFilename, ifstream::in);
 		if (!ifsSettings.is_open())	{
-			log( LOG_ERROR, string("Unable to open config file ") + configFilename);
+			log( LOG_ERROR, string("Невозможно открыть файл конфигурации ") + configFilename);
 			if( buffer ) delete [] buffer;
 			return TL_PARAM_ERROR;
 		}
@@ -1802,14 +1819,14 @@ int main(int argc, const char* argv[])
 		ifsSettings.close();
 
 		if (config.GetConnectString().empty()) {
-			log(LOG_ERROR, string("Connect string to DB is not found in ") + configFilename + ". Exiting.");
+			log(LOG_ERROR, string("Строка подключения к БД не найдена в конфиг-файле ") + configFilename);
 			ofsLog.close();
 			exit(TL_FILEERROR);
 		}
 
 		FILE *fTapFile=fopen(argv[1],"rb");
 		if(!fTapFile) {
-			log( LOG_ERROR, string ("Unable to open input file ") + argv[1]);
+			log( LOG_ERROR, string ("Невозможно открыть файл ") + argv[1]);
 			return TL_PARAM_ERROR;
 		}
 
@@ -1823,7 +1840,7 @@ int main(int argc, const char* argv[])
 		fclose(fTapFile);
 		if(bytesRead < tapFileLen)
 		{
-			log( LOG_ERROR, string("Error reading file ") + argv[1]);
+			log( LOG_ERROR, string("Ошибка чтения данных файла ") + argv[1]);
 			delete [] buffer;
 			return TL_FILEERROR;
 		}
@@ -1847,13 +1864,13 @@ int main(int argc, const char* argv[])
 			otlLogConnect.rlogon(config.GetConnectString().c_str());	
 		}
 		catch (otl_exception &otlEx) {
-			log( LOG_ERROR, "Unable to connect to DB:" );
+			log( LOG_ERROR, "Невозможно подключиться к базе данных:" );
 			log( LOG_ERROR, (char*) otlEx.msg );
 			if( strlen(otlEx.stm_text) > 0 )
 				log( LOG_ERROR, (char*) otlEx.stm_text ); // log SQL that caused the error
 			if( strlen(otlEx.var_info) > 0 )
 				log( LOG_ERROR, (char*) otlEx.var_info ); // log the variable that caused the error
-			log( LOG_ERROR, "---- TAP3 loader finished with errors, see DB log----");
+			log( LOG_ERROR, "---- TAP3 loader завершил работу с ошибками, см. журнал ----");
 			if(ofsLog.is_open()) ofsLog.close();
 			return TL_CONNECTERROR; 
 		}
@@ -1861,30 +1878,37 @@ int main(int argc, const char* argv[])
 		int res;
 		switch( fileType ) {
 		case ftTAP:
-			log(LOG_INFO, "--------- Loading TAP3 file (ID " + to_string((long long) fileID)+") started ---------");
+			log(LOG_INFO, "--------- Загрузка TAP3-файла (ID " + to_string((long long) fileID)+") начата ---------");
 			res = LoadTAPFileToDB( buffer, tapFileLen, fileID, roamingHubID, bPrintOnly ) ; 
 			if (res == TL_OK)
-				log(LOG_INFO, "--------- Loading TAP3 file (ID " + to_string((long long)fileID) + ") finished successfully ---------");
+				log(LOG_INFO, "--------- Загрузка TAP3-файла (ID " + to_string((long long)fileID) + 
+					") завершена успешно ---------");
 			else
-				log(LOG_INFO, "--------- Loading TAP3 file file (ID " + to_string((long long)fileID) + ") finished with errors ---------");
+				log(LOG_INFO, "--------- Загрузка TAP3-файла (ID " + to_string((long long)fileID) + 
+					") завершена с ошибками ---------");
 			Finalize( res == TL_OK );
 			return res;
 		case ftRAP:
-			log(LOG_INFO, "--------- Loading RAP file (ID " + to_string((long long) fileID) + ") started ---------");
+			log(LOG_INFO, "--------- Загрузка RAP-файла (ID " + to_string((long long) fileID) + ") начата ---------");
 			res = LoadRAPFileToDB( buffer, tapFileLen, fileID, roamingHubID, bPrintOnly ) ; 
 			if (res == TL_OK)
-				log(LOG_INFO, "--------- Loading RAP file (ID " + to_string((long long)fileID) + ") finished successfully ---------");
+				log(LOG_INFO, "--------- Загрузка RAP-файла (ID " + to_string((long long)fileID) + 
+					") завершена успешно ---------");
 			else
-				log(LOG_INFO, "--------- Loading RAP file file (ID " + to_string((long long)fileID) + ") finished with errors ---------");
+				log(LOG_INFO, "--------- Загрузка RAP-файла (ID " + to_string((long long)fileID) + 
+					") завершена с ошибками ---------");
 			Finalize( res == TL_OK );
 			return res;
 		case ftRAPAcknowledgement:
-			log(LOG_INFO, "--------- Loading RAP Acknowledgement file (ID " + to_string((long long) fileID) + ") started ---------");
+			log(LOG_INFO, "--------- Загрузка RAP Acknowledgement-файла (ID " + to_string((long long) fileID) + 
+					") начата ---------");
 			res = LoadRAPAckToDB(buffer, tapFileLen, fileID, roamingHubID, bPrintOnly);
 			if (res == TL_OK)
-				log(LOG_INFO, "--------- Loading RAP Acknowledgement file (ID " + to_string((long long)fileID) + ") finished successfully ---------");
+				log(LOG_INFO, "--------- Загрузка RAP Acknowledgement-файла (ID " + to_string((long long)fileID) + 
+					") завершена успешно ---------");
 			else
-				log(LOG_INFO, "--------- Loading RAP Acknowledgement file (ID " + to_string((long long)fileID) + ") finished with errors ---------");
+				log(LOG_INFO, "--------- Загрузка RAP Acknowledgement-файла (ID " + to_string((long long)fileID) + 
+					") завершена с ошибками ---------");
 			Finalize( res == TL_OK );
 			return res;
 		}
@@ -1892,7 +1916,8 @@ int main(int argc, const char* argv[])
 	}
 	catch(...)
 	{
-		log( LOG_ERROR, "Unknown exception caught. Call number=" + to_string( static_cast<unsigned long long> (index)));
+		log( LOG_ERROR, "Неизвестное исключение. Номер звонка " + to_string( static_cast<unsigned long long> 
+				(index)));
 		Finalize();
 		return TL_UNKNOWN;
 	}
