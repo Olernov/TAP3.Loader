@@ -129,7 +129,7 @@ IOTValidationResult CallValidator::ValidateIOTAndCreateRAP(long long eventID, Ca
 
 	otlStream.open(1, "call BILLING.TAP3_IOT.SetValidationResult(:call_type /*short,in*/, :event_id /*bigint,in*/, "
 		":iot_mode /*long,in*/, :res /*long,in*/, :err_descr /*char[255],in*/,"
-		":rapfileid /*long,in*/)", m_otlConnect);
+		":rapseqnum /*char[10],in*/)", m_otlConnect);
 	otlStream
 		<< static_cast<short>(callType)
 		<< eventID
