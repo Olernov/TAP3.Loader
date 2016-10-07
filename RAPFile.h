@@ -1,20 +1,19 @@
+#pragma once
+
 class RAPFile
 {
 public:
 	RAPFile(otl_connect& otlConnect, Config& config, long roamingHubID);
-	~RAPFile();
-	int Initialize(string tapSender, string tapRecipient, string tapAvailableStamp, string fileTypeIndicator);
+	int Initialize(const TransferBatch*);
+	int Initialize(const Notification*);
 	void AddReturnDetail(ReturnDetail* returnDetail, long long callTotalCharge);
 	void Finalize();
 	int LoadToDB();
 	int EncodeAndUpload();
-	bool Created();
-
-	/*int CreateRAPFile(ReturnDetail* returnDetail[],
-		int returnDetailsCount, long long totalSevereReturn, long roamingHubID,
-		string tapSender, string tapRecipient, string tapAvailableStamp, string fileTypeIndicator,
-		string& rapSequenceNum);*/
-	
+	bool IsInitialized();
+	std::string GetName();
+	long GetID();
+	std::string GetSequenceNumber();
 private:
 	otl_connect& m_otlConnect;
 	Config& m_config;
@@ -28,9 +27,9 @@ private:
 	long long m_totalSevereReturn;
 	int m_returnDetailsCount;
 	
+	int Initialize(string tapSender, string tapRecipient, string tapAvailableStamp, string fileTypeIndicator);
 	int OctetString_fromInt64(OCTET_STRING& octetStr, long long value);
-	bool UploadFileToFtp(string filename, string fullFileName, FtpSetting ftpSetting);
-	
+	bool UploadFileToFtp(string filename, string fullFileName, FtpSetting ftpSetting);	
 };
 
 

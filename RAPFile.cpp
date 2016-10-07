@@ -29,43 +29,29 @@ RAPFile::RAPFile(otl_connect& otlConnect, Config& config, long roamingHubID) :
 }
 
 
-RAPFile::~RAPFile()
-{
-	//if (m_returnBatch)
-	//	ASN_STRUCT_FREE(asn_DEF_ReturnBatch, m_returnBatch);
-}
-
-int RAPFile::OctetString_fromInt64(OCTET_STRING& octetStr, long long value)
-{
-	unsigned char buf[8];
-	int i;
-	// fill buffer with value, most significant bytes first, less significant - last
-	for (i = 7; i >= 0; i--) {
-		buf[i] = value & 0xFF;
-		value >>= 8;
-		if (value == 0) break;
-	}
-	if (i == 0 && value > 0)
-		throw "8-byte integer overflow";
-
-	if (buf[i] >= 0x80) {
-		// it will be treated as negative value, so add one more byte
-		if (i == 0)
-			throw "8-byte integer overflow";
-		buf[--i] = 0;
-	}
-
-	OCTET_STRING_fromBuf(&octetStr, (const char*) ( buf + i ), 8 - i);
-
-	return 8 - i;
-}
-
-
-bool RAPFile::Created() 
+bool RAPFile::IsInitialized() 
 {
 	return (m_fileID > 0);
 }
 
+
+int RAPFile::Initialize(const TransferBatch* transferBatch)
+{
+	return Initialize((char*)transferBatch->batchControlInfo->sender->buf,
+		(char*)transferBatch->batchControlInfo->recipient->buf,
+		(char*)transferBatch->batchControlInfo->fileAvailableTimeStamp->localTimeStamp->buf,
+		(transferBatch->batchControlInfo->fileTypeIndicator ?
+		(char*)transferBatch->batchControlInfo->fileTypeIndicator->buf : ""));
+}
+	
+int RAPFile::Initialize(const Notification* notification)
+{
+	return Initialize((char*)notification->sender->buf,
+		(char*) notification->recipient->buf, 
+		(char*) notification->fileAvailableTimeStamp->localTimeStamp->buf,
+		(notification->fileTypeIndicator ? 
+			(char*) notification->fileTypeIndicator->buf : ""));
+}
 
 int RAPFile::Initialize(string tapSender, string tapRecipient, string tapAvailableStamp, string fileTypeIndicator)
 {
@@ -106,8 +92,8 @@ int RAPFile::Initialize(string tapSender, string tapRecipient, string tapAvailab
 	}
 	m_returnBatch = (ReturnBatch*) calloc(1, sizeof(ReturnBatch));
 	// sender and recipient switch their places
-	OCTET_STRING_fromBuf(&m_returnBatch->rapBatchControlInfoRap.sender, tapSender.c_str(), tapSender.size());
-	OCTET_STRING_fromBuf(&m_returnBatch->rapBatchControlInfoRap.recipient, tapRecipient.c_str(), tapRecipient.size());
+	OCTET_STRING_fromBuf(&m_returnBatch->rapBatchControlInfoRap.sender, tapRecipient.c_str(), tapRecipient.size());
+	OCTET_STRING_fromBuf(&m_returnBatch->rapBatchControlInfoRap.recipient, tapSender.c_str(), tapSender.size());
 
 	OCTET_STRING_fromBuf(&m_returnBatch->rapBatchControlInfoRap.rapFileSequenceNumber, 
 		m_fileSeqNum.c_str(), m_fileSeqNum.size());
@@ -213,7 +199,7 @@ int RAPFile::EncodeAndUpload()
 		return TL_DECODEERROR;
 	}
 
-	log(m_filename, LOG_INFO, "RAP-файл для роумингового координатора" + m_roamingHubName + 
+	log(m_filename, LOG_INFO, "RAP-файл для роумингового координатора " + m_roamingHubName + 
 		" успешно сформирован");
 
 	// Upload file to FTP-server
@@ -228,4 +214,48 @@ int RAPFile::EncodeAndUpload()
 		" в настройках не указан FTP-сервер. Файл сформирован локально, загрузки не производилось.");
 
 	return TL_OK;
+}
+
+
+std::string RAPFile::GetName() 
+{ 
+	return m_filename; 
+};
+
+
+long RAPFile::GetID()
+{
+	return m_fileID;
+}
+
+
+std::string RAPFile::GetSequenceNumber()
+{
+	return m_fileSeqNum;
+}
+
+
+int RAPFile::OctetString_fromInt64(OCTET_STRING& octetStr, long long value)
+{
+	unsigned char buf[8];
+	int i;
+	// fill buffer with value, most significant bytes first, less significant - last
+	for (i = 7; i >= 0; i--) {
+		buf[i] = value & 0xFF;
+		value >>= 8;
+		if (value == 0) break;
+	}
+	if (i == 0 && value > 0)
+		throw "8-byte integer overflow";
+
+	if (buf[i] >= 0x80) {
+		// it will be treated as negative value, so add one more byte
+		if (i == 0)
+			throw "8-byte integer overflow";
+		buf[--i] = 0;
+	}
+
+	OCTET_STRING_fromBuf(&octetStr, (const char*) ( buf + i ), 8 - i);
+
+	return 8 - i;
 }

@@ -320,11 +320,7 @@ int TAPValidator::CreateBatchControlInfoRAPFile(string logMessage, int errorCode
 	assert(m_transferBatch->batchControlInfo->recipient);
 	assert(m_transferBatch->batchControlInfo->fileAvailableTimeStamp);
 
-	int rapInitRes = rapFile.Initialize((char*)m_transferBatch->batchControlInfo->sender->buf,
-		(char*)m_transferBatch->batchControlInfo->recipient->buf,
-		(char*)m_transferBatch->batchControlInfo->fileAvailableTimeStamp->localTimeStamp->buf,
-		(m_transferBatch->batchControlInfo->fileTypeIndicator ?
-		(char*)m_transferBatch->batchControlInfo->fileTypeIndicator->buf : ""));
+	int rapInitRes = rapFile.Initialize(m_transferBatch);
 	if (rapInitRes != TL_OK)
 		return rapInitRes;
 	rapFile.AddReturnDetail(returnDetail, 0);
@@ -473,11 +469,7 @@ int TAPValidator::CreateAccountingInfoRAPFile(string logMessage, int errorCode, 
 	assert(m_transferBatch->batchControlInfo->recipient);
 	assert(m_transferBatch->batchControlInfo->fileAvailableTimeStamp);
 
-	int rapInitRes = rapFile.Initialize((char*)m_transferBatch->batchControlInfo->sender->buf,
-		(char*)m_transferBatch->batchControlInfo->recipient->buf,
-		(char*)m_transferBatch->batchControlInfo->fileAvailableTimeStamp->localTimeStamp->buf,
-		(m_transferBatch->batchControlInfo->fileTypeIndicator ?
-		(char*)m_transferBatch->batchControlInfo->fileTypeIndicator->buf : ""));
+	int rapInitRes = rapFile.Initialize(m_transferBatch);
 	if (rapInitRes != TL_OK)
 		return rapInitRes;
 
@@ -803,11 +795,7 @@ int TAPValidator::CreateNetworkInfoRAPFile(string logMessage, int errorCode, con
 	assert(m_transferBatch->batchControlInfo->recipient);
 	assert(m_transferBatch->batchControlInfo->fileAvailableTimeStamp);
 
-	int rapInitRes = rapFile.Initialize((char*)m_transferBatch->batchControlInfo->sender->buf,
-		(char*)m_transferBatch->batchControlInfo->recipient->buf,
-		(char*)m_transferBatch->batchControlInfo->fileAvailableTimeStamp->localTimeStamp->buf,
-		(m_transferBatch->batchControlInfo->fileTypeIndicator ?
-		(char*)m_transferBatch->batchControlInfo->fileTypeIndicator->buf : ""));
+	int rapInitRes = rapFile.Initialize(m_transferBatch);
 	if (rapInitRes != TL_OK)
 		return rapInitRes;
 	rapFile.AddReturnDetail(returnDetail, 0);
@@ -924,11 +912,7 @@ int TAPValidator::CreateAuditControlInfoRAPFile(string logMessage, int errorCode
 	assert(m_transferBatch->batchControlInfo->sender);
 	assert(m_transferBatch->batchControlInfo->fileAvailableTimeStamp);
 
-	int rapInitRes = rapFile.Initialize((char*)m_transferBatch->batchControlInfo->sender->buf,
-		(char*)m_transferBatch->batchControlInfo->recipient->buf,
-		(char*)m_transferBatch->batchControlInfo->fileAvailableTimeStamp->localTimeStamp->buf,
-		(m_transferBatch->batchControlInfo->fileTypeIndicator ?
-		(char*)m_transferBatch->batchControlInfo->fileTypeIndicator->buf : ""));
+	int rapInitRes = rapFile.Initialize(m_transferBatch);
 	if (rapInitRes != TL_OK)
 		return rapInitRes;
 	rapFile.AddReturnDetail(returnDetail, 0);
@@ -1024,11 +1008,7 @@ int TAPValidator::CreateTransferBatchRAPFile(string logMessage, int errorCode)
 	assert(m_transferBatch->batchControlInfo->recipient);
 	assert(m_transferBatch->batchControlInfo->fileAvailableTimeStamp);
 	
-	int rapInitRes = rapFile.Initialize((char*)m_transferBatch->batchControlInfo->sender->buf,
-		(char*)m_transferBatch->batchControlInfo->recipient->buf,
-		(char*)m_transferBatch->batchControlInfo->fileAvailableTimeStamp->localTimeStamp->buf,
-		(m_transferBatch->batchControlInfo->fileTypeIndicator ?
-		(char*)m_transferBatch->batchControlInfo->fileTypeIndicator->buf : ""));
+	int rapInitRes = rapFile.Initialize(m_transferBatch);
 	if (rapInitRes != TL_OK)
 		return rapInitRes;
 	rapFile.AddReturnDetail(returnDetail, 0);
@@ -1126,11 +1106,7 @@ int TAPValidator::CreateNotificationRAPFile(string logMessage, int errorCode, co
 	assert(m_notification->recipient);
 	assert(m_notification->fileAvailableTimeStamp);
 
-	int rapInitRes = rapFile.Initialize((char*)m_notification->sender->buf,
-		(char*) m_notification->recipient->buf, 
-		(char*) m_notification->fileAvailableTimeStamp->localTimeStamp->buf,
-		(m_notification->fileTypeIndicator ? 
-			(char*) m_notification->fileTypeIndicator->buf : ""));
+	int rapInitRes = rapFile.Initialize(m_notification);
 	if (rapInitRes != TL_OK)
 		return rapInitRes;
 	rapFile.AddReturnDetail(returnDetail, 0);

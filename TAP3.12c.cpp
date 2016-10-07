@@ -993,7 +993,7 @@ void Finalize(bool bSuccess = false)
 int LoadTAPEventsToDB(long fileID, long iotValidationMode, long roamingHubID)
 {
 	long long eventID;
-	long validationRes;
+	CallValidationResult validationRes;
 	otl_nocommit_stream otlCallUpdater;
 	CallValidator callValidator(otlConnect, &dataInterchange->choice.transferBatch, config, roamingHubID);
 	for(int index=0; index < dataInterchange->choice.transferBatch.callEventDetails->list.count; index++)
@@ -1005,8 +1005,8 @@ int LoadTAPEventsToDB(long fileID, long iotValidationMode, long roamingHubID)
 				// ошибка загрузки
 				return (long) eventID;
 			}
-			validationRes = callValidator.ValidateCallIOT(eventID, TELEPHONY_CALL, index, iotValidationMode);
-			if (validationRes == VALIDATION_IMPOSSIBLE)
+			validationRes = callValidator.ValidateCall(eventID, TELEPHONY_CALL, index, iotValidationMode);
+			if (validationRes == UNABLE_TO_VALIDATE_CALL)
 				return TL_TAP_NOT_VALIDATED;
 			break;
 		case CallEventDetail_PR_mobileTerminatedCall:
@@ -1015,22 +1015,21 @@ int LoadTAPEventsToDB(long fileID, long iotValidationMode, long roamingHubID)
 				// ошибка загрузки
 				return (long)eventID;
 			}
-			validationRes = callValidator.ValidateCallIOT(eventID, TELEPHONY_CALL, index, iotValidationMode);
-			if (validationRes == VALIDATION_IMPOSSIBLE)
+			validationRes = callValidator.ValidateCall(eventID, TELEPHONY_CALL, index, iotValidationMode);
+			if (validationRes == UNABLE_TO_VALIDATE_CALL)
 				return TL_TAP_NOT_VALIDATED;
 			break;
 		case CallEventDetail_PR_supplServiceEvent:
 			// just ignore it
 			break;
-
 		case CallEventDetail_PR_gprsCall:
 			if ((eventID = ProcessGPRSCall(fileID, index+1, 
 					&dataInterchange->choice.transferBatch.callEventDetails->list.array[index]->choice.gprsCall)) < 0) {
 				// ошибка загрузки
 				return (long) eventID;
 			}
-			validationRes = callValidator.ValidateCallIOT(eventID, GPRS_CALL, index, iotValidationMode);
-				if (validationRes == VALIDATION_IMPOSSIBLE)
+			validationRes = callValidator.ValidateCall(eventID, GPRS_CALL, index, iotValidationMode);
+				if (validationRes == UNABLE_TO_VALIDATE_CALL)
 					return TL_TAP_NOT_VALIDATED;
 			break;
 		default:
@@ -1043,8 +1042,8 @@ int LoadTAPEventsToDB(long fileID, long iotValidationMode, long roamingHubID)
 		}
 	}
 	RAPFile& rapFile = callValidator.GetRAPFile();
-	if (rapFile.Created()) {
-		log(pShortName, LOG_ERROR, "Обнаружены ошибки валидации IOT.");
+	if (rapFile.IsInitialized()) {
+		log(pShortName, LOG_ERROR, "Обнаружены ошибки валидации событий.");
 		rapFile.Finalize();
 		rapFile.LoadToDB();
 		int writeRes = rapFile.EncodeAndUpload();
