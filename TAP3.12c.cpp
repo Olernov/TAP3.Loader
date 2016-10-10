@@ -166,6 +166,18 @@ long long OctetStr2Int64(const OCTET_STRING_t& octetStr)
 
 	return value;
 }
+//------------------------------
+char* OctetStrToHexStr(const OCTET_STRING_t& octetStr)
+{
+	char* buffer = new char[2 * octetStr.size + 1];
+	
+	for(int i = 0; i < octetStr.size; i++) {
+		sprintf(&buffer[2*i], "%02X", octetStr.buf[i]);
+	}
+	buffer[2 * octetStr.size] = '\0';
+	return buffer;
+}
+
 //----------------------------------
 double GetTAPPower()
 {
@@ -507,7 +519,7 @@ long long ProcessOriginatedCall(long fileID, int index, const MobileOriginatedCa
 			":hClir  /* short,in */, :hPartynetw  /* char[20],in */ , "
 			"to_date(:hCalltime  /* char[20],in */,'yyyymmddhh24miss'), :hCall_utc /* char[10],in */,:hDuration  /* long,in */ ,:hCause  /* long,in */,"
 			":hRecentity /* char[30],in */, :hRecentityType /* char[10],in */, :hLocarea /* long,in */, :hCellid /* long,in */, "
-			":hServnetw /* char[20],in */, :hImei /* char[30],in */, :hCallReference /* bigint,in */, :hRAPSeqnum /* char[10],in */) "
+			":hServnetw /* char[20],in */, :hImei /* char[30],in */, :hCallReference /* char[16],in */, :hRAPSeqnum /* char[10],in */) "
 			"returning EVENT_ID into :hEventId /*bigint,out*/", otlConnect);
 	otlStream 
 		<< fileID
@@ -562,10 +574,13 @@ long long ProcessOriginatedCall(long fileID, int index, const MobileOriginatedCa
 		<< (pMCall->equipmentIdentifier ? (pMCall->equipmentIdentifier->present == ImeiOrEsn_PR_imei ? BCDString(&pMCall->equipmentIdentifier->choice.imei) :
 			(pMCall->equipmentIdentifier->present == ImeiOrEsn_PR_esn ? BCDString(&pMCall->equipmentIdentifier->choice.esn) : "")) : "");
 		//<< (pMCall->locationInformation->networkLocation->callReference ? (const char*) pMCall->locationInformation->networkLocation->callReference->buf : "")
-	if (pMCall->locationInformation->networkLocation->callReference)
-		otlStream << OctetStr2Int64(*pMCall->locationInformation->networkLocation->callReference);
-	else
+	if (pMCall->locationInformation->networkLocation->callReference) {
+		unique_ptr<char> hexString(OctetStrToHexStr(*pMCall->locationInformation->networkLocation->callReference));
+		otlStream << hexString.get();
+	}
+	else {
 		otlStream << otl_null();
+	}
 	otlStream << (pMCall->basicCallInformation->rapFileSequenceNumber ? (const char*) pMCall->basicCallInformation->rapFileSequenceNumber->buf : "");
 	
 	otlStream.flush();
@@ -664,7 +679,7 @@ long long ProcessTerminatedCall(long fileID, int index, const MobileTerminatedCa
 			":hClir  /* short,in */, :hPartynetw  /* char[20],in */ , "
 			"to_date(:hCalltime  /* char[20],in */,'yyyymmddhh24miss'), :hCall_utc /* char[10],in */,:hDuration  /* long,in */ ,:hCause  /* long,in */,"
 			":hRecentity /* char[30],in */, :hRecentityType /* char[10],in */, :hLocarea /* long,in */, :hCellid /* long,in */, "
-			":hServnetw /* char[20],in */, :hImei /* char[30],in */, :hCallReference /* bigint,in */, :hRAPSeqnum /* char[10],in */) "
+			":hServnetw /* char[20],in */, :hImei /* char[30],in */, :hCallReference /* char[16],in */, :hRAPSeqnum /* char[10],in */) "
 			"returning EVENT_ID into :hEventId /*bigint,out*/", otlConnect);
 	
 	otlStream 
@@ -716,8 +731,10 @@ long long ProcessTerminatedCall(long fileID, int index, const MobileTerminatedCa
 			(const char*)pMCall->locationInformation->geographicalLocation->servingNetwork->buf : "") : "")
 		<< (pMCall->equipmentIdentifier ? (pMCall->equipmentIdentifier->present == ImeiOrEsn_PR_imei ? BCDString(&pMCall->equipmentIdentifier->choice.imei) :
 			(pMCall->equipmentIdentifier->present == ImeiOrEsn_PR_esn ? BCDString(&pMCall->equipmentIdentifier->choice.esn) : "")) : "");
-	if (pMCall->locationInformation->networkLocation->callReference)
-		otlStream << OctetStr2Int64(*pMCall->locationInformation->networkLocation->callReference);
+	if (pMCall->locationInformation->networkLocation->callReference) {
+		unique_ptr<char> hexString(OctetStrToHexStr(*pMCall->locationInformation->networkLocation->callReference));
+		otlStream << hexString.get();
+	}
 	else
 		otlStream << otl_null();
 	otlStream << (pMCall->basicCallInformation->rapFileSequenceNumber ? (const char*) pMCall->basicCallInformation->rapFileSequenceNumber->buf : "");
