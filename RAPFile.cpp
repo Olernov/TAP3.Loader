@@ -35,7 +35,7 @@ bool RAPFile::IsInitialized()
 }
 
 
-int RAPFile::Initialize(const TransferBatch* transferBatch)
+bool RAPFile::Initialize(const TransferBatch* transferBatch)
 {
 	return Initialize((char*)transferBatch->batchControlInfo->sender->buf,
 		(char*)transferBatch->batchControlInfo->recipient->buf,
@@ -44,7 +44,7 @@ int RAPFile::Initialize(const TransferBatch* transferBatch)
 		(char*)transferBatch->batchControlInfo->fileTypeIndicator->buf : ""));
 }
 	
-int RAPFile::Initialize(const Notification* notification)
+bool RAPFile::Initialize(const Notification* notification)
 {
 	return Initialize((char*)notification->sender->buf,
 		(char*) notification->recipient->buf, 
@@ -53,7 +53,7 @@ int RAPFile::Initialize(const Notification* notification)
 			(char*) notification->fileTypeIndicator->buf : ""));
 }
 
-int RAPFile::Initialize(string tapSender, string tapRecipient, string tapAvailableStamp, string fileTypeIndicator)
+bool RAPFile::Initialize(string tapSender, string tapRecipient, string tapAvailableStamp, string fileTypeIndicator)
 {
 	otl_nocommit_stream otlStream;
 	otlStream.open(1, "call BILLING.TAP3.CreateRAPFileByTAPLoader(:pRecipientTAPCode /*char[10],in*/, :pRoamingHubID /*long,in*/, "
@@ -88,7 +88,7 @@ int RAPFile::Initialize(string tapSender, string tapRecipient, string tapAvailab
 		log(LOG_ERROR, "Функция TAP3.CreateRAPFileByTAPLoader вернула ошибку " + to_string((long long) m_fileID) +
 			". Возможно, ТАР-файл был получен от одного роумингового координатора, а сеть приписана к другому "
 			"(справочник \"Привязка к роуминговому координатору\"). Файл не был загружен.");
-		return TL_ORACLEERROR;
+		return false;
 	}
 	m_returnBatch = (ReturnBatch*) calloc(1, sizeof(ReturnBatch));
 	// sender and recipient switch their places
@@ -120,7 +120,7 @@ int RAPFile::Initialize(string tapSender, string tapRecipient, string tapAvailab
 		m_returnBatch->rapBatchControlInfoRap.fileTypeIndicator = 
 			OCTET_STRING_new_fromBuf(&asn_DEF_FileTypeIndicator, fileTypeIndicator.c_str(), fileTypeIndicator.size());
 
-	return TL_OK;
+	return true;
 }
 
 
@@ -217,19 +217,19 @@ int RAPFile::EncodeAndUpload()
 }
 
 
-std::string RAPFile::GetName() 
+std::string RAPFile::GetName() const
 { 
 	return m_filename; 
 };
 
 
-long RAPFile::GetID()
+long RAPFile::GetID() const
 {
 	return m_fileID;
 }
 
 
-std::string RAPFile::GetSequenceNumber()
+std::string RAPFile::GetSequenceNumber() const
 {
 	return m_fileSeqNum;
 }

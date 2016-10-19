@@ -1,4 +1,5 @@
-// See class description at TAPValidator.cpp
+#pragma once
+#include "RAPFile.h"
 
 enum TAPConstants
 {
@@ -122,10 +123,14 @@ struct ExchangeRate
 class TAPValidator
 {
 public:
-	TAPValidator(otl_connect&, Config&);
-	TAPValidationResult Validate(DataInterChange*, long, long);
-	long GetRapFileID();
-	string GetRapSequenceNum();
+	TAPValidator(otl_connect& dbConnect, Config& config, long roamingHubID);
+	void Validate(DataInterChange* dataInterchange);
+
+	long GetRapFileID() const;
+	string GetRapSequenceNum() const;
+	long GetSenderNetworkID() const;
+	long GetIOTValidationMode() const;
+	TAPValidationResult GetValidationResult() const;
 private:
 	otl_connect& m_otlConnect;
 	Config& m_config;
@@ -133,11 +138,16 @@ private:
 	TransferBatch* m_transferBatch;
 	Notification* m_notification;
 
-	long m_rapFileID;
+	//long m_rapFileID;
 	long m_mobileNetworkID;
+	long m_iotValidationMode;
 	long m_roamingHubID;
-	string m_rapSequenceNum;
+	std::string m_rapSequenceNum;
+	TAPValidationResult m_validationResult;
+	RAPFile m_rapFile;
 
+	bool SetSenderNetworkID();
+	void SetIOTValidationMode();
 	bool IsRecipientCorrect(string recipient);
 	bool IsTestFile();
 	FileDuplicationCheckRes IsFileDuplicated();

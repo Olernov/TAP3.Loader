@@ -11,6 +11,7 @@
 #include "ReturnBatch.h"
 #include "ConfigContainer.h"
 #include "TAPValidator.h"
+#include "CallValidator.h"
 #include "RAPFile.h"
 
 using namespace std;
@@ -25,8 +26,8 @@ extern int write_out(const void *buffer, size_t size, void *app_key);
 extern "C" int ncftp_main(int argc, char **argv, char* result);
 
 
-TAPValidator::TAPValidator(otl_connect& dbConnect, Config& config) 
-	: m_otlConnect(dbConnect), m_config(config), m_rapFileID(0)
+TAPValidator::TAPValidator(otl_connect& dbConnect, Config& config, long roamingHubID) 
+	: m_otlConnect(dbConnect), m_config(config), m_roamingHubID(roamingHubID), m_rapFile(dbConnect, config, roamingHubID)
 {
 }
 
@@ -43,6 +44,40 @@ bool TAPValidator::IsRecipientCorrect(string recipient)
 	return (recipient == ourTAPCode);
 }
 
+
+bool TAPValidator::SetSenderNetworkID()
+{
+	otl_nocommit_stream otlStream;
+	otlStream.open(1, "call BILLING.TAP3.GetSenderNetworkID(:sender /*char[20],in*/) "
+		"into :res /*long,out*/", m_otlConnect);
+	if (m_transferBatch) {
+		otlStream << m_transferBatch->batchControlInfo->sender->buf;
+	}
+	else {
+		otlStream << m_notification->sender->buf;
+	}
+	otlStream >> m_mobileNetworkID;
+	otlStream.close();
+	if (m_mobileNetworkID < 0) {
+		log(LOG_ERROR, "Невозможно найти в базе сеть отправителя по TAP-коду. Проверьте корректность "
+			"ее заведения. Файл не был загружен.");
+		return false;
+	}
+	return true;
+}
+
+
+void TAPValidator::SetIOTValidationMode()
+{
+	otl_nocommit_stream otlStream;
+	otlStream.open(1, "select nvl(iot_validation_mode_id, :iot_no_need/*int,in*/) from BILLING.TMobileNetwork "
+		"where object_no = :mobilenetworkid /*long,in*/", m_otlConnect);
+	otlStream 
+		<< IOT_NO_NEED
+		<< m_mobileNetworkID;
+	otlStream >> m_iotValidationMode;
+
+}
 
 FileDuplicationCheckRes TAPValidator::IsFileDuplicated()
 {
@@ -314,19 +349,17 @@ int TAPValidator::CreateBatchControlInfoRAPFile(string logMessage, int errorCode
 	}
 	ASN_SEQUENCE_ADD(&returnDetail->choice.fatalReturn.batchControlError->errorDetail, errorDetail);
 
-	RAPFile rapFile(m_otlConnect, m_config, m_roamingHubID);
-	
 	assert(m_transferBatch->batchControlInfo->sender);
 	assert(m_transferBatch->batchControlInfo->recipient);
 	assert(m_transferBatch->batchControlInfo->fileAvailableTimeStamp);
 
-	int rapInitRes = rapFile.Initialize(m_transferBatch);
+	int rapInitRes = m_rapFile.Initialize(m_transferBatch);
 	if (rapInitRes != TL_OK)
 		return rapInitRes;
-	rapFile.AddReturnDetail(returnDetail, 0);
-	rapFile.Finalize();
-	rapFile.LoadToDB();
-	int loadRes = rapFile.EncodeAndUpload();
+	m_rapFile.AddReturnDetail(returnDetail, 0);
+	m_rapFile.Finalize();
+	m_rapFile.LoadToDB();
+	int loadRes = m_rapFile.EncodeAndUpload();
 
 	// Clear previously copied pointers to avoid ASN_STRUCT_FREE errors
 	returnDetail->choice.fatalReturn.batchControlError->batchControlInfo.sender = NULL;
@@ -463,20 +496,17 @@ int TAPValidator::CreateAccountingInfoRAPFile(string logMessage, int errorCode, 
 	}
 	ASN_SEQUENCE_ADD(&returnDetail->choice.fatalReturn.accountingInfoError->errorDetail, errorDetail);
 
-	RAPFile rapFile(m_otlConnect, m_config, m_roamingHubID);
-	
 	assert(m_transferBatch->batchControlInfo->sender);
 	assert(m_transferBatch->batchControlInfo->recipient);
 	assert(m_transferBatch->batchControlInfo->fileAvailableTimeStamp);
 
-	int rapInitRes = rapFile.Initialize(m_transferBatch);
-	if (rapInitRes != TL_OK)
-		return rapInitRes;
+	if (!m_rapFile.Initialize(m_transferBatch))
+		return TL_TAP_NOT_VALIDATED;
 
-	rapFile.AddReturnDetail(returnDetail, 0);
-	rapFile.Finalize();
-	rapFile.LoadToDB();
-	int loadRes = rapFile.EncodeAndUpload();
+	m_rapFile.AddReturnDetail(returnDetail, 0);
+	m_rapFile.Finalize();
+	m_rapFile.LoadToDB();
+	int loadRes = m_rapFile.EncodeAndUpload();
 
 	// Clear previously copied pointers to avoid ASN_STRUCT_FREE errors
 	returnDetail->choice.fatalReturn.accountingInfoError->accountingInfo.currencyConversionInfo = NULL;
@@ -789,19 +819,16 @@ int TAPValidator::CreateNetworkInfoRAPFile(string logMessage, int errorCode, con
 	}
 	ASN_SEQUENCE_ADD(&returnDetail->choice.fatalReturn.networkInfoError->errorDetail, errorDetail);
 
-	RAPFile rapFile(m_otlConnect, m_config, m_roamingHubID);
-	
 	assert(m_transferBatch->batchControlInfo->sender);
 	assert(m_transferBatch->batchControlInfo->recipient);
 	assert(m_transferBatch->batchControlInfo->fileAvailableTimeStamp);
 
-	int rapInitRes = rapFile.Initialize(m_transferBatch);
-	if (rapInitRes != TL_OK)
-		return rapInitRes;
-	rapFile.AddReturnDetail(returnDetail, 0);
-	rapFile.Finalize();
-	rapFile.LoadToDB();
-	int loadRes = rapFile.EncodeAndUpload();
+	if (!m_rapFile.Initialize(m_transferBatch))
+		return TL_TAP_NOT_VALIDATED;
+	m_rapFile.AddReturnDetail(returnDetail, 0);
+	m_rapFile.Finalize();
+	m_rapFile.LoadToDB();
+	int loadRes = m_rapFile.EncodeAndUpload();
 
 	// Clear previously copied pointers to avoid ASN_STRUCT_FREE errors
 	returnDetail->choice.fatalReturn.networkInfoError->networkInfo.recEntityInfo = NULL;
@@ -906,19 +933,16 @@ int TAPValidator::CreateAuditControlInfoRAPFile(string logMessage, int errorCode
 	}
 	ASN_SEQUENCE_ADD(&returnDetail->choice.fatalReturn.auditControlInfoError->errorDetail, errorDetail);
 
-	RAPFile rapFile(m_otlConnect, m_config, m_roamingHubID);
-	
 	assert(m_transferBatch->batchControlInfo->sender);
 	assert(m_transferBatch->batchControlInfo->sender);
 	assert(m_transferBatch->batchControlInfo->fileAvailableTimeStamp);
 
-	int rapInitRes = rapFile.Initialize(m_transferBatch);
-	if (rapInitRes != TL_OK)
-		return rapInitRes;
-	rapFile.AddReturnDetail(returnDetail, 0);
-	rapFile.Finalize();
-	rapFile.LoadToDB();
-	int loadRes = rapFile.EncodeAndUpload();
+	if (!m_rapFile.Initialize(m_transferBatch))
+		return TL_TAP_NOT_VALIDATED;
+	m_rapFile.AddReturnDetail(returnDetail, 0);
+	m_rapFile.Finalize();
+	m_rapFile.LoadToDB();
+	int loadRes = m_rapFile.EncodeAndUpload();
 
 	// Clear previously copied pointers to avoid ASN_STRUCT_FREE errors
 	returnDetail->choice.fatalReturn.auditControlInfoError->auditControlInfo.callEventDetailsCount = NULL;
@@ -1002,19 +1026,16 @@ int TAPValidator::CreateTransferBatchRAPFile(string logMessage, int errorCode)
 	ASN_SEQUENCE_ADD(errorDetail->errorContext, errorContext1level);
 	ASN_SEQUENCE_ADD(&returnDetail->choice.fatalReturn.transferBatchError->errorDetail, errorDetail);
 	
-	RAPFile rapFile(m_otlConnect, m_config, m_roamingHubID);
-	
 	assert(m_transferBatch->batchControlInfo->sender);
 	assert(m_transferBatch->batchControlInfo->recipient);
 	assert(m_transferBatch->batchControlInfo->fileAvailableTimeStamp);
 	
-	int rapInitRes = rapFile.Initialize(m_transferBatch);
-	if (rapInitRes != TL_OK)
-		return rapInitRes;
-	rapFile.AddReturnDetail(returnDetail, 0);
-	rapFile.Finalize();
-	rapFile.LoadToDB();
-	int loadRes = rapFile.EncodeAndUpload();
+	if (!m_rapFile.Initialize(m_transferBatch))
+		return TL_TAP_NOT_VALIDATED;
+	m_rapFile.AddReturnDetail(returnDetail, 0);
+	m_rapFile.Finalize();
+	m_rapFile.LoadToDB();
+	int loadRes = m_rapFile.EncodeAndUpload();
 
 	return loadRes;
 }
@@ -1100,19 +1121,16 @@ int TAPValidator::CreateNotificationRAPFile(string logMessage, int errorCode, co
 	}
 	ASN_SEQUENCE_ADD(&returnDetail->choice.fatalReturn.notificationError->errorDetail, errorDetail);
 	
-	RAPFile rapFile(m_otlConnect, m_config, m_roamingHubID);
-	
 	assert(m_notification->sender);
 	assert(m_notification->recipient);
 	assert(m_notification->fileAvailableTimeStamp);
 
-	int rapInitRes = rapFile.Initialize(m_notification);
-	if (rapInitRes != TL_OK)
-		return rapInitRes;
-	rapFile.AddReturnDetail(returnDetail, 0);
-	rapFile.Finalize();
-	rapFile.LoadToDB();
-	int loadRes = rapFile.EncodeAndUpload();
+	if (!m_rapFile.Initialize(m_notification))
+		return TL_TAP_NOT_VALIDATED;
+	m_rapFile.AddReturnDetail(returnDetail, 0);
+	m_rapFile.Finalize();
+	m_rapFile.LoadToDB();
+	int loadRes = m_rapFile.EncodeAndUpload();
 
 	return loadRes;
 }
@@ -1131,8 +1149,6 @@ TAPValidationResult TAPValidator::ValidateNotification()
 		log(LOG_ERROR, "Валидация: некорректный получатель " + string((char*) m_notification->recipient->buf));
 		return VALIDATION_IMPOSSIBLE;
 	}
-
-	
 
 	int fileSeqNum;
 	try {
@@ -1157,10 +1173,8 @@ TAPValidationResult TAPValidator::ValidateNotification()
 }
 
 
-TAPValidationResult TAPValidator::Validate(DataInterChange* dataInterchange, long mobileNetworkID, long roamingHubID)
+void TAPValidator::Validate(DataInterChange* dataInterchange)
 {
-	m_mobileNetworkID = mobileNetworkID;
-	m_roamingHubID = roamingHubID;
 	switch (dataInterchange->present) {
 		case DataInterChange_PR_transferBatch:
 			m_transferBatch = &dataInterchange->choice.transferBatch;
@@ -1171,8 +1185,14 @@ TAPValidationResult TAPValidator::Validate(DataInterChange* dataInterchange, lon
 			m_transferBatch = NULL;
 			break;
 		default:
-			return VALIDATION_IMPOSSIBLE;
+			m_validationResult = VALIDATION_IMPOSSIBLE;
 	}
+	if (!SetSenderNetworkID()) {
+		m_validationResult = VALIDATION_IMPOSSIBLE;
+		return;
+	}
+
+	SetIOTValidationMode();
 	IncomingTAPAllowed tapAllowed = IsIncomingTAPAllowed();
 	switch (tapAllowed) {
 	case INCOMING_TAP_ALLOWED:
@@ -1180,26 +1200,50 @@ TAPValidationResult TAPValidator::Validate(DataInterChange* dataInterchange, lon
 	case INCOMING_TAP_NOT_ALLOWED:
 		log(LOG_ERROR, "Валидация: Входящие TAP-файлы не разрешены для данной сети. Проверьте настройку поля "
 			"\"Вид роуминга\" в справочнике \"Привязка к роуминговому координатору\".");
-		return VALIDATION_IMPOSSIBLE;
+		m_validationResult = VALIDATION_IMPOSSIBLE;
+		return;
 	case UNABLE_TO_DETERMINE:
 	default:
 		log(LOG_ERROR, "Валидация: Невозможно определить, разрешены или нет входящие TAP-файлы для данной сети."
 			" Проверьте настройки справочника \"Привязка к роуминговому координатору\". Возможно, сеть привязана"
 			" к одному координатору, а файлы поступают от другого.");
-		return VALIDATION_IMPOSSIBLE;
+		m_validationResult = VALIDATION_IMPOSSIBLE;
+		return;
 	}
-	if (m_transferBatch)
-		return ValidateTransferBatch();
-	else
-		return ValidateNotification();
+	if (m_transferBatch) {
+		m_validationResult = ValidateTransferBatch();
+	}
+	else {
+		m_validationResult = ValidateNotification();
+	}
 }
 
-long TAPValidator::GetRapFileID()
+
+long TAPValidator::GetRapFileID() const
 {
-	return m_rapFileID;
+	return m_rapFile.GetID();
 }
 
-string TAPValidator::GetRapSequenceNum()
+
+std::string TAPValidator::GetRapSequenceNum() const
 {
-	return m_rapSequenceNum;
+	return m_rapFile.GetSequenceNumber();
+}
+
+
+long TAPValidator::GetSenderNetworkID() const
+{
+	return m_mobileNetworkID;
+}
+
+
+long TAPValidator::GetIOTValidationMode() const
+{
+	return m_iotValidationMode;
+}
+
+
+TAPValidationResult TAPValidator::GetValidationResult() const
+{
+	return m_validationResult;
 }

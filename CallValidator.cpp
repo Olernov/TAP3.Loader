@@ -119,7 +119,9 @@ IOTValidationResult CallValidator::ValidateIOTAndCreateRAP(long long eventID, Ca
 	if (validationRes != RAEX_IOT_VALID) {
 		if (iotValidationMode == IOT_RAP_DROPOUT_ALERT) {
 			if (!m_rapFile.IsInitialized()) {
-				m_rapFile.Initialize(m_transferBatch);
+				if (!m_rapFile.Initialize(m_transferBatch)) {
+					return IOT_VALIDATION_IMPOSSIBLE;
+				}
 			}
 			m_rapFile.AddReturnDetail(
 				CreateReturnDetailForIOTError(callIndex, CHARGE_NOT_IN_ROAMING_AGREEMENT, 

@@ -509,7 +509,6 @@ long long ProcessOriginatedCall(long fileID, int index, const MobileOriginatedCa
 	string recEntityType;
 
 	otl_nocommit_stream otlStream;	
-	
 	otlStream.open( 1 /*stream buffer size in logical rows*/, 
 		"insert into BILLING.TAP3_CALL (EVENT_ID,FILE_ID,RSN,ORIG_OR_TERM,IMSI,MSISDN,PARTY_NUMBER, DIALLED_DIGITS, THIRD_PARTY, SMS_PARTYNUMBER, "
 			"CLIR,PARTY_NETWORK,CALL_TIME,CALL_UTCOFF,DURATION,CAUSE_FOR_TERM,REC_ENTITY,REC_ENTITY_TYPE,"
@@ -1069,23 +1068,170 @@ int LoadTAPEventsToDB(long fileID, long iotValidationMode, long roamingHubID)
 	}
 	return TL_OK;
 }
+//----------------------------------
+void LoadNotificationHeader(long fileID, long roamingHubID, std::string filename, const TAPValidator& tapValidator)
+{
+	otl_nocommit_stream otlStream;
+	otlStream.open( 1 /*stream buffer size in logical rows*/, 
+		"insert into BILLING.TAP3_FILE (FILE_ID, MOBILENETWORK_ID, ROAMINGHUB_ID, FILENAME, SENDER, RECIPIENT, SEQUENCE_NUMBER , CREATION_STAMP, CREATION_UTCOFF,"
+		"CUTOFF_STAMP, CUTOFF_UTCOFF, AVAILABLE_STAMP, AVAILABLE_UTCOFF, LOAD_TIME, NOTIFICATION, TAP_VERSION, TAP_RELEASE, "
+		"FILE_TYPE_INDICATOR, STATUS, CANCEL_RAP_FILE_SEQNUM, CANCEL_RAP_FILE_ID) "
+		"values ("
+		":hfileid /*long,in*/, :mobilenetworkid /*long,in*/, :roamhubid /*long,in*/, :filename/*char[255],in*/, "
+		":sender/*char[20],in*/, :recipient/*char[20],in*/, :seq_num/*char[10],in*/,"
+		"to_date(:creation_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :creation_utcoff /* char[10],in*/,"
+		"to_date(:cutoff_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :cutoff_utcoff /* char[10],in*/,"
+		"to_date(:available_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :available_utcoff /* char[10],in*/,"
+		"sysdate, 1 /*notification*/, "
+		":tapVer /*long,in*/, :specif /*long,in*/, :filetype /*char[5],in*/, :status /*long,in*/,"
+		":cancel_rap_file_seqnum /*char[10],in*/, :cancel_rap_file_id /*long,in*/)", otlConnect); 
+	otlStream
+		<< fileID
+		<< tapValidator.GetSenderNetworkID()
+		<< roamingHubID
+		<< filename 
+		<< (char*) dataInterchange->choice.notification.sender->buf 
+		<< (char*) dataInterchange->choice.notification.recipient->buf 
+		<< dataInterchange->choice.notification.fileSequenceNumber->buf
+		<< (dataInterchange->choice.notification.fileCreationTimeStamp ? (const char*) dataInterchange->choice.notification.fileCreationTimeStamp->localTimeStamp->buf : "")
+		<< (dataInterchange->choice.notification.fileCreationTimeStamp ? (const char*)dataInterchange->choice.notification.fileCreationTimeStamp->utcTimeOffset->buf : "")
+		<< dataInterchange->choice.notification.transferCutOffTimeStamp->localTimeStamp->buf
+		<< dataInterchange->choice.notification.transferCutOffTimeStamp->utcTimeOffset->buf
+		<< dataInterchange->choice.notification.fileAvailableTimeStamp->localTimeStamp->buf
+		<< dataInterchange->choice.notification.fileAvailableTimeStamp->utcTimeOffset->buf
+		<< *dataInterchange->choice.notification.specificationVersionNumber
+		<< *dataInterchange->choice.notification.releaseVersionNumber
+		<< (dataInterchange->choice.notification.fileTypeIndicator ? (const char*) dataInterchange->choice.notification.fileTypeIndicator->buf : "");
+	if (tapValidator.GetValidationResult() == FATAL_ERROR) 
+		otlStream 
+			<< (long) INFILE_STATUS_FATAL
+			<< tapValidator.GetRapSequenceNum()
+			<< tapValidator.GetRapFileID();
+	else
+		otlStream 
+			<< (long) INFILE_STATUS_NEW
+			<< otl_null()
+			<< otl_null();
+			
+	otlStream.flush();
+	otlStream.close();
+}
+//----------------------------------------
+void LoadTransferBatchHeader(long fileID, long roamingHubID, std::string filename, const TAPValidator& tapValidator)
+{
+	otl_nocommit_stream otlStream;
+	otlStream.open(1 /*stream buffer size in logical rows*/,
+		"insert into BILLING.TAP3_FILE (FILE_ID, MOBILENETWORK_ID, ROAMINGHUB_ID, FILENAME, SENDER, RECIPIENT, SEQUENCE_NUMBER , CREATION_STAMP, CREATION_UTCOFF,"
+		"CUTOFF_STAMP, CUTOFF_UTCOFF, AVAILABLE_STAMP, AVAILABLE_UTCOFF, LOCAL_CURRENCY, LOAD_TIME, EARLIEST_TIME, EARLIEST_UTCOFF, "
+		"LATEST_TIME, LATEST_UTCOFF, EVENT_COUNT, TOTAL_CHARGE, TOTAL_TAX, TOTAL_DISCOUNT, NOTIFICATION, STATUS, TAP_VERSION, TAP_RELEASE, "
+		"FILE_TYPE_INDICATOR, TAP_DECIMAL_PLACES, CANCEL_RAP_FILE_SEQNUM, CANCEL_RAP_FILE_ID) "
+			"values ("
+			":hfileid /*long,in*/, :mobilenetworkid /*long,in*/, :roamhubid /*long,in*/, :filename/*char[255],in*/, "
+			":sender/*char[20],in*/, :recipient/*char[20],in*/, :seq_num/*char[10],in*/,"
+			"to_date(:creation_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :creation_utcoff /* char[10],in */,"
+			"to_date(:cutoff_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :cutoff_utcoff /* char[10],in */,"
+			"to_date(:available_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :available_utcoff /* char[10],in */,"
+			":local_currency /* char[255],in */, sysdate, to_date(:earliest /*char[20],in*/, 'yyyymmddhh24miss'), :earliest_utcoff /* char[10],in */,"
+			"to_date(:latest /*char[20],in*/, 'yyyymmddhh24miss'), :latest_utcoff /* char[10],in */, :eventcount /* long,in */, :totalchr /* double,in */, "
+			":total_tax /*double,in*/, :total_discount /*double,in*/, 0 /*notification*/, :status /*long,in*/, :tapVer /*long,in*/, :specif /*long,in*/, "
+			":filetype /*char[5],in*/, :tapDecimalPlaces /*long,in*/, :cancel_rap_file_seqnum /*char[10],in*/, :cancel_rap_file_id /*long,in*/) ", otlConnect);
+	otlStream
+		<< fileID
+		<< tapValidator.GetSenderNetworkID()
+		<< roamingHubID
+		<< filename
+		<< (dataInterchange->choice.transferBatch.batchControlInfo->sender ?
+		(char*)dataInterchange->choice.transferBatch.batchControlInfo->sender->buf : "")
+		<< (dataInterchange->choice.transferBatch.batchControlInfo->recipient ?
+		(char*)dataInterchange->choice.transferBatch.batchControlInfo->recipient->buf : "")
+		<< (dataInterchange->choice.transferBatch.batchControlInfo->fileSequenceNumber ?
+		(char*)dataInterchange->choice.transferBatch.batchControlInfo->fileSequenceNumber->buf : "")
+		<< (dataInterchange->choice.transferBatch.batchControlInfo->fileCreationTimeStamp ?
+		(char*)dataInterchange->choice.transferBatch.batchControlInfo->fileCreationTimeStamp->localTimeStamp->buf : "")
+		<< (dataInterchange->choice.transferBatch.batchControlInfo->fileCreationTimeStamp ?
+		(char*)dataInterchange->choice.transferBatch.batchControlInfo->fileCreationTimeStamp->utcTimeOffset->buf : "")
+		<< (dataInterchange->choice.transferBatch.batchControlInfo->transferCutOffTimeStamp ?
+		(char*)dataInterchange->choice.transferBatch.batchControlInfo->transferCutOffTimeStamp->localTimeStamp->buf : "")
+		<< (dataInterchange->choice.transferBatch.batchControlInfo->transferCutOffTimeStamp ?
+		(char*)dataInterchange->choice.transferBatch.batchControlInfo->transferCutOffTimeStamp->utcTimeOffset->buf : "")
+		<< (dataInterchange->choice.transferBatch.batchControlInfo->fileAvailableTimeStamp ?
+		(char*)dataInterchange->choice.transferBatch.batchControlInfo->fileAvailableTimeStamp->localTimeStamp->buf : "")
+		<< (dataInterchange->choice.transferBatch.batchControlInfo->fileAvailableTimeStamp ?
+		(char*)dataInterchange->choice.transferBatch.batchControlInfo->fileAvailableTimeStamp->utcTimeOffset->buf : "")
+		<< (dataInterchange->choice.transferBatch.accountingInfo->localCurrency ?
+		(char*)dataInterchange->choice.transferBatch.accountingInfo->localCurrency->buf : "")
+		<< (dataInterchange->choice.transferBatch.auditControlInfo->earliestCallTimeStamp ?
+		(char*)dataInterchange->choice.transferBatch.auditControlInfo->earliestCallTimeStamp->localTimeStamp->buf : "")
+		<< (dataInterchange->choice.transferBatch.auditControlInfo->earliestCallTimeStamp ?
+		(char*)dataInterchange->choice.transferBatch.auditControlInfo->earliestCallTimeStamp->utcTimeOffset->buf : "")
+		<< (dataInterchange->choice.transferBatch.auditControlInfo->latestCallTimeStamp ?
+		(char*)dataInterchange->choice.transferBatch.auditControlInfo->latestCallTimeStamp->localTimeStamp->buf : "")
+		<< (dataInterchange->choice.transferBatch.auditControlInfo->latestCallTimeStamp ?
+		(char*)dataInterchange->choice.transferBatch.auditControlInfo->latestCallTimeStamp->utcTimeOffset->buf : "");
+	if (dataInterchange->choice.transferBatch.auditControlInfo->callEventDetailsCount)
+		otlStream << *dataInterchange->choice.transferBatch.auditControlInfo->callEventDetailsCount;
+	else
+		otlStream << otl_null();
+	if (dataInterchange->choice.transferBatch.auditControlInfo->totalCharge)
+		otlStream << OctetStr2Int64(*dataInterchange->choice.transferBatch.auditControlInfo->totalCharge) / GetTAPPower();
+	else
+		otlStream << otl_null();
+	if (dataInterchange->choice.transferBatch.auditControlInfo->totalTaxValue)
+		otlStream << OctetStr2Int64(*dataInterchange->choice.transferBatch.auditControlInfo->totalTaxValue) / GetTAPPower();
+	else
+		otlStream << otl_null();
+	if (dataInterchange->choice.transferBatch.auditControlInfo->totalDiscountValue)
+		otlStream << OctetStr2Int64(*dataInterchange->choice.transferBatch.auditControlInfo->totalDiscountValue) / GetTAPPower();
+	else
+		otlStream << otl_null();
 
+	if (tapValidator.GetValidationResult() == FATAL_ERROR)
+		otlStream << (long)INFILE_STATUS_FATAL;
+	else
+		otlStream << (long)INFILE_STATUS_NEW;
 
+	if (dataInterchange->choice.transferBatch.batchControlInfo->specificationVersionNumber)
+		otlStream << *dataInterchange->choice.transferBatch.batchControlInfo->specificationVersionNumber;
+	else
+		otlStream << otl_null();
+	if (dataInterchange->choice.transferBatch.batchControlInfo->releaseVersionNumber)
+		otlStream << *dataInterchange->choice.transferBatch.batchControlInfo->releaseVersionNumber;
+	else
+		otlStream << otl_null();
+
+	otlStream << (dataInterchange->choice.transferBatch.batchControlInfo->fileTypeIndicator ?
+		(const char*)dataInterchange->choice.transferBatch.batchControlInfo->fileTypeIndicator->buf : "");
+
+	if (dataInterchange->choice.transferBatch.accountingInfo->tapDecimalPlaces)
+		otlStream << *dataInterchange->choice.transferBatch.accountingInfo->tapDecimalPlaces;
+	else
+		otlStream << otl_null();
+
+	if (tapValidator.GetValidationResult() == FATAL_ERROR)
+		otlStream
+		<< tapValidator.GetRapSequenceNum()
+		<< tapValidator.GetRapFileID();
+	else
+		otlStream
+		<< otl_null()
+		<< otl_null();
+
+	otlStream.flush();
+	otlStream.close();
+}
+//----------------------------------------
 int LoadTAPFileToDB( unsigned char* buffer, long dataLen, long fileID, long roamingHubID, bool bPrintOnly ) 
 {
 	int index=0;
 	try {
 		asn_dec_rval_t rval;
-	
 		rval = ber_decode(0, &asn_DEF_DataInterChange, (void**) &dataInterchange, buffer, dataLen);
-
 		if(rval.code != RC_OK) {
 			log( LOG_ERROR, string("Ошибка ASN-декодирования файла. Код ошибки ") + 
 				to_string( static_cast<unsigned long long> (rval.code)));
 			Finalize();
 			return TL_DECODEERROR;
 		}
-
 		if( bPrintOnly ) {
 			char* printName = new char[ strlen(pShortName)+5 ];
 			sprintf(printName, "%s.txt", pShortName);
@@ -1103,179 +1249,30 @@ int LoadTAPFileToDB( unsigned char* buffer, long dataLen, long fileID, long roam
 			return TL_OK;
 		}
 
-		long iotValidationMode;
-		long mobileNetworkID = GetSenderNetworkID(iotValidationMode);
-		if(mobileNetworkID < 0 ) {
-			log(LOG_ERROR, "Невозможно найти в базе сеть отправителя по TAP-коду. Проверьте корректность "
-				"ее заведения. Файл не был загружен.");
-			return TL_UNKNOWN_SENDER;
-		}
-		TAPValidator tapValidator(otlConnect, config);
-		TAPValidationResult validationRes = tapValidator.Validate(dataInterchange, mobileNetworkID, roamingHubID);
-		if (validationRes == VALIDATION_IMPOSSIBLE) {
-			log(LOG_ERROR, "Невозможно провести валидацию TAP-файла. Файл не был загружен."); //"Unable to validate TAP file. File is not loaded.");
+		TAPValidator tapValidator(otlConnect, config, roamingHubID);
+		tapValidator.Validate(dataInterchange);
+		if (tapValidator.GetValidationResult() == VALIDATION_IMPOSSIBLE) {
+			log(LOG_ERROR, "Невозможно провести валидацию TAP-файла. Файл не был загружен."); 
 			return TL_TAP_NOT_VALIDATED;
 		}
-		else if (validationRes == FILE_DUPLICATION) {
+		else if (tapValidator.GetValidationResult() == FILE_DUPLICATION) {
 			// no uploading needed
 			return TL_OK;
 		}
 		
 		otl_nocommit_stream otlStream;
 		if (dataInterchange->present == DataInterChange_PR_notification) {
-			// Processing Notification (empty TAP file, i.e. with no call records)
-			otlStream.open( 1 /*stream buffer size in logical rows*/, 
-				"insert into BILLING.TAP3_FILE (FILE_ID, MOBILENETWORK_ID, ROAMINGHUB_ID, FILENAME, SENDER, RECIPIENT, SEQUENCE_NUMBER , CREATION_STAMP, CREATION_UTCOFF,"
-				"CUTOFF_STAMP, CUTOFF_UTCOFF, AVAILABLE_STAMP, AVAILABLE_UTCOFF, LOAD_TIME, NOTIFICATION, TAP_VERSION, TAP_RELEASE, "
-				"FILE_TYPE_INDICATOR, STATUS, CANCEL_RAP_FILE_SEQNUM, CANCEL_RAP_FILE_ID) "
-				"values ("
-				":hfileid /*long,in*/, :mobilenetworkid /*long,in*/, :roamhubid /*long,in*/, :filename/*char[255],in*/, "
-				":sender/*char[20],in*/, :recipient/*char[20],in*/, :seq_num/*char[10],in*/,"
-				"to_date(:creation_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :creation_utcoff /* char[10],in*/,"
-				"to_date(:cutoff_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :cutoff_utcoff /* char[10],in*/,"
-				"to_date(:available_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :available_utcoff /* char[10],in*/,"
-				"sysdate, 1 /*notification*/, "
-				":tapVer /*long,in*/, :specif /*long,in*/, :filetype /*char[5],in*/, :status /*long,in*/,"
-				":cancel_rap_file_seqnum /*char[10],in*/, :cancel_rap_file_id /*long,in*/)", otlConnect); 
-			otlStream
-				<< fileID
-				<< mobileNetworkID
-				<< roamingHubID
-				<< pShortName 
-				<< (char*) dataInterchange->choice.notification.sender->buf 
-				<< (char*) dataInterchange->choice.notification.recipient->buf 
-				<< dataInterchange->choice.notification.fileSequenceNumber->buf
-				<< (dataInterchange->choice.notification.fileCreationTimeStamp ? (const char*) dataInterchange->choice.notification.fileCreationTimeStamp->localTimeStamp->buf : "")
-				<< (dataInterchange->choice.notification.fileCreationTimeStamp ? (const char*)dataInterchange->choice.notification.fileCreationTimeStamp->utcTimeOffset->buf : "")
-				<< dataInterchange->choice.notification.transferCutOffTimeStamp->localTimeStamp->buf
-				<< dataInterchange->choice.notification.transferCutOffTimeStamp->utcTimeOffset->buf
-				<< dataInterchange->choice.notification.fileAvailableTimeStamp->localTimeStamp->buf
-				<< dataInterchange->choice.notification.fileAvailableTimeStamp->utcTimeOffset->buf
-				<< *dataInterchange->choice.notification.specificationVersionNumber
-				<< *dataInterchange->choice.notification.releaseVersionNumber
-				<< (dataInterchange->choice.notification.fileTypeIndicator ? (const char*) dataInterchange->choice.notification.fileTypeIndicator->buf : "");
-			if (validationRes == FATAL_ERROR) 
-				otlStream 
-					<< (long) INFILE_STATUS_FATAL
-					<< tapValidator.GetRapSequenceNum()
-					<< tapValidator.GetRapFileID();
-			else
-				otlStream 
-					<< (long) INFILE_STATUS_NEW
-					<< otl_null()
-					<< otl_null();
-			
-			otlStream.flush();
-			otlStream.close();
-
-			return TL_OK;
+			LoadNotificationHeader(fileID, roamingHubID, pShortName, tapValidator);
 		}
-
-		// Processing Transfer Batch
-		otlStream.open( 1 /*stream buffer size in logical rows*/, 
-			"insert into BILLING.TAP3_FILE (FILE_ID, MOBILENETWORK_ID, ROAMINGHUB_ID, FILENAME, SENDER, RECIPIENT, SEQUENCE_NUMBER , CREATION_STAMP, CREATION_UTCOFF,"
-			"CUTOFF_STAMP, CUTOFF_UTCOFF, AVAILABLE_STAMP, AVAILABLE_UTCOFF, LOCAL_CURRENCY, LOAD_TIME, EARLIEST_TIME, EARLIEST_UTCOFF, "
-			"LATEST_TIME, LATEST_UTCOFF, EVENT_COUNT, TOTAL_CHARGE, TOTAL_TAX, TOTAL_DISCOUNT, NOTIFICATION, STATUS, TAP_VERSION, TAP_RELEASE, "
-			"FILE_TYPE_INDICATOR, TAP_DECIMAL_PLACES, CANCEL_RAP_FILE_SEQNUM, CANCEL_RAP_FILE_ID) \
-			values ("
-			  ":hfileid /*long,in*/, :mobilenetworkid /*long,in*/, :roamhubid /*long,in*/, :filename/*char[255],in*/, "
-			  ":sender/*char[20],in*/, :recipient/*char[20],in*/, :seq_num/*char[10],in*/,"
-			  "to_date(:creation_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :creation_utcoff /* char[10],in */,"
-			  "to_date(:cutoff_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :cutoff_utcoff /* char[10],in */,"
-			  "to_date(:available_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :available_utcoff /* char[10],in */,"
-			  ":local_currency /* char[255],in */, sysdate, to_date(:earliest /*char[20],in*/, 'yyyymmddhh24miss'), :earliest_utcoff /* char[10],in */,"
-			  "to_date(:latest /*char[20],in*/, 'yyyymmddhh24miss'), :latest_utcoff /* char[10],in */, :eventcount /* long,in */, :totalchr /* double,in */, "
-			  ":total_tax /*double,in*/, :total_discount /*double,in*/, 0 /*notification*/, :status /*long,in*/, :tapVer /*long,in*/, :specif /*long,in*/, "
-			  ":filetype /*char[5],in*/, :tapDecimalPlaces /*long,in*/, :cancel_rap_file_seqnum /*char[10],in*/, :cancel_rap_file_id /*long,in*/) ", otlConnect);
-		otlStream 
-			<< fileID
-			<< mobileNetworkID
-			<< roamingHubID
-			<< pShortName 
-			<< ( dataInterchange->choice.transferBatch.batchControlInfo->sender ?
-				 (char*) dataInterchange->choice.transferBatch.batchControlInfo->sender->buf : "" )
-			<< ( dataInterchange->choice.transferBatch.batchControlInfo->recipient ?
-				(char*) dataInterchange->choice.transferBatch.batchControlInfo->recipient->buf : "" )
-			<< ( dataInterchange->choice.transferBatch.batchControlInfo->fileSequenceNumber ?
-				(char*) dataInterchange->choice.transferBatch.batchControlInfo->fileSequenceNumber->buf : "" )
-			<< ( dataInterchange->choice.transferBatch.batchControlInfo->fileCreationTimeStamp ?
-				(char*) dataInterchange->choice.transferBatch.batchControlInfo->fileCreationTimeStamp->localTimeStamp->buf : "" )
-			<< ( dataInterchange->choice.transferBatch.batchControlInfo->fileCreationTimeStamp ?
-				(char*) dataInterchange->choice.transferBatch.batchControlInfo->fileCreationTimeStamp->utcTimeOffset->buf : "" )
-			<< ( dataInterchange->choice.transferBatch.batchControlInfo->transferCutOffTimeStamp ?
-				(char*) dataInterchange->choice.transferBatch.batchControlInfo->transferCutOffTimeStamp->localTimeStamp->buf : "" )
-			<< ( dataInterchange->choice.transferBatch.batchControlInfo->transferCutOffTimeStamp ?
-				(char*) dataInterchange->choice.transferBatch.batchControlInfo->transferCutOffTimeStamp->utcTimeOffset->buf : "" )
-			<< ( dataInterchange->choice.transferBatch.batchControlInfo->fileAvailableTimeStamp ?
-				(char*) dataInterchange->choice.transferBatch.batchControlInfo->fileAvailableTimeStamp->localTimeStamp->buf : "" )
-			<< ( dataInterchange->choice.transferBatch.batchControlInfo->fileAvailableTimeStamp ?
-				(char*) dataInterchange->choice.transferBatch.batchControlInfo->fileAvailableTimeStamp->utcTimeOffset->buf : "" )
-			<< ( dataInterchange->choice.transferBatch.accountingInfo->localCurrency ?
-				(char*) dataInterchange->choice.transferBatch.accountingInfo->localCurrency->buf : "" )
-			<< ( dataInterchange->choice.transferBatch.auditControlInfo->earliestCallTimeStamp ?
-				(char*) dataInterchange->choice.transferBatch.auditControlInfo->earliestCallTimeStamp->localTimeStamp->buf : "" )
-			<< ( dataInterchange->choice.transferBatch.auditControlInfo->earliestCallTimeStamp ?
-				(char*) dataInterchange->choice.transferBatch.auditControlInfo->earliestCallTimeStamp->utcTimeOffset->buf : "" )
-			<< ( dataInterchange->choice.transferBatch.auditControlInfo->latestCallTimeStamp ?
-				(char*) dataInterchange->choice.transferBatch.auditControlInfo->latestCallTimeStamp->localTimeStamp->buf : "" )
-			<< ( dataInterchange->choice.transferBatch.auditControlInfo->latestCallTimeStamp ?
-				(char*) dataInterchange->choice.transferBatch.auditControlInfo->latestCallTimeStamp->utcTimeOffset->buf : "" );
-		if (dataInterchange->choice.transferBatch.auditControlInfo->callEventDetailsCount)
-			otlStream << *dataInterchange->choice.transferBatch.auditControlInfo->callEventDetailsCount;
-		else
-			otlStream << otl_null();
-		if (dataInterchange->choice.transferBatch.auditControlInfo->totalCharge)
-			otlStream << OctetStr2Int64(*dataInterchange->choice.transferBatch.auditControlInfo->totalCharge) / GetTAPPower();
-		else
-			otlStream << otl_null();
-		if (dataInterchange->choice.transferBatch.auditControlInfo->totalTaxValue)
-			otlStream << OctetStr2Int64(*dataInterchange->choice.transferBatch.auditControlInfo->totalTaxValue) / GetTAPPower();
-		else
-			otlStream << otl_null();
-		if (dataInterchange->choice.transferBatch.auditControlInfo->totalDiscountValue)
-			otlStream << OctetStr2Int64(*dataInterchange->choice.transferBatch.auditControlInfo->totalDiscountValue) / GetTAPPower();
-		else
-			otlStream << otl_null();
-
-		if (validationRes == FATAL_ERROR) 
-			otlStream << (long) INFILE_STATUS_FATAL;
-		else
-			otlStream << (long) INFILE_STATUS_NEW;
-			
-		if (dataInterchange->choice.transferBatch.batchControlInfo->specificationVersionNumber)
-			otlStream << *dataInterchange->choice.transferBatch.batchControlInfo->specificationVersionNumber;
-		else
-			otlStream << otl_null();
-		if (dataInterchange->choice.transferBatch.batchControlInfo->releaseVersionNumber)
-			otlStream << *dataInterchange->choice.transferBatch.batchControlInfo->releaseVersionNumber;
-		else
-			otlStream << otl_null();
-
-		otlStream << ( dataInterchange->choice.transferBatch.batchControlInfo->fileTypeIndicator ? 
-			(const char*) dataInterchange->choice.transferBatch.batchControlInfo->fileTypeIndicator->buf : "" );
-
-		if (dataInterchange->choice.transferBatch.accountingInfo->tapDecimalPlaces)
-			otlStream << *dataInterchange->choice.transferBatch.accountingInfo->tapDecimalPlaces;
-		else
-			otlStream << otl_null();
-
-		if (validationRes == FATAL_ERROR)
-			otlStream
-				<< tapValidator.GetRapSequenceNum()
-				<< tapValidator.GetRapFileID();
-		else
-			otlStream
-				<< otl_null()
-				<< otl_null();
-
-		otlStream.flush();
-		otlStream.close();
-		
-		if (validationRes == FATAL_ERROR)
-			// Finish processing here. No call records are uploaded for Fatal Error TAP files
-			return TL_OK;
-		
-		return LoadTAPEventsToDB(fileID, iotValidationMode, roamingHubID);
+		else {
+			LoadTransferBatchHeader(fileID, roamingHubID, pShortName, tapValidator);
+			if (tapValidator.GetValidationResult() != FATAL_ERROR) {
+				return LoadTAPEventsToDB(fileID, tapValidator.GetIOTValidationMode(), roamingHubID);
+			}
+			else {
+				return TL_OK;
+			}
+		}
 	}
 	catch (otl_exception &otlEx) {
 		otlConnect.rollback();
@@ -1961,9 +1958,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 	return TRUE;
 }
 
-//---------------------------------
-// Function exported by DLL
-//---------------------------------
+
 __declspec (dllexport) int __stdcall LoadFileToDB(char* pFilename, long fileID, long roamingHubID, char* pConfigFilename)
 {
 	string strFileID = to_string ((unsigned long long) fileID);
