@@ -518,7 +518,7 @@ long long ProcessOriginatedCall(long fileID, int index, const MobileOriginatedCa
 			":hClir  /* short,in */, :hPartynetw  /* char[20],in */ , "
 			"to_date(:hCalltime  /* char[20],in */,'yyyymmddhh24miss'), :hCall_utc /* char[10],in */,:hDuration  /* long,in */ ,:hCause  /* long,in */,"
 			":hRecentity /* char[30],in */, :hRecentityType /* char[10],in */, :hLocarea /* long,in */, :hCellid /* long,in */, "
-			":hServnetw /* char[20],in */, :hImei /* char[30],in */, :hCallReference /* char[16],in */, :hRAPSeqnum /* char[10],in */) "
+			":hServnetw /* char[20],in */, :hImei /* char[30],in */, :hCallReference /* char[32],in */, :hRAPSeqnum /* char[10],in */) "
 			"returning EVENT_ID into :hEventId /*bigint,out*/", otlConnect);
 	otlStream 
 		<< fileID
@@ -678,7 +678,7 @@ long long ProcessTerminatedCall(long fileID, int index, const MobileTerminatedCa
 			":hClir  /* short,in */, :hPartynetw  /* char[20],in */ , "
 			"to_date(:hCalltime  /* char[20],in */,'yyyymmddhh24miss'), :hCall_utc /* char[10],in */,:hDuration  /* long,in */ ,:hCause  /* long,in */,"
 			":hRecentity /* char[30],in */, :hRecentityType /* char[10],in */, :hLocarea /* long,in */, :hCellid /* long,in */, "
-			":hServnetw /* char[20],in */, :hImei /* char[30],in */, :hCallReference /* char[16],in */, :hRAPSeqnum /* char[10],in */) "
+			":hServnetw /* char[20],in */, :hImei /* char[30],in */, :hCallReference /* char[32],in */, :hRAPSeqnum /* char[10],in */) "
 			"returning EVENT_ID into :hEventId /*bigint,out*/", otlConnect);
 	
 	otlStream 
