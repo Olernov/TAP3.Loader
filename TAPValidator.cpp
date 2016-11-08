@@ -21,7 +21,6 @@ using namespace std;
 extern void log(string filename, short msgType, string msgText);
 extern void log(short msgType, string msgText);
 extern long long OctetStr2Int64(const OCTET_STRING_t& octetStr);
-extern int LoadReturnBatchToDB(ReturnBatch* returnBatch, long fileID, long roamingHubID, string rapFilename, long fileStatus);
 extern int write_out(const void *buffer, size_t size, void *app_key);
 extern "C" int ncftp_main(int argc, char **argv, char* result);
 

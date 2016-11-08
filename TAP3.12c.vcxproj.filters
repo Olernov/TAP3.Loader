@@ -1251,6 +1251,12 @@
     <ClInclude Include="RAPFile.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="RoamingFileLoader.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="TapLoader.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="stdafx.cpp">
@@ -2460,6 +2466,12 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="RAPFile.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="RoamingFileLoader.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="TapLoader.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

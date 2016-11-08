@@ -2,6 +2,7 @@
 //
 
 #include "stdafx.h"
+//#include <mutex>
 #include "OTL_Header.h"
 #include "DataInterchange.h"
 #include "BatchControlInfo.h"
@@ -23,9 +24,10 @@ DataInterChange* dataInterchange = NULL;
 ReturnBatch* returnBatch = NULL;
 Acknowledgement* acknowledgement = NULL;
 Config config;
+CRITICAL_SECTION loadCritSection;
 
-otl_connect otlConnect;
-otl_connect otlLogConnect;
+//otl_connect otlConnect;
+
 ofstream ofsLog;
 
 const short mainArgsCount = 5;
@@ -35,8 +37,6 @@ enum FileType {
 	ftRAP = 1,
 	ftRAPAcknowledgement = 2
 };
-
-//extern "C" int _search4tag(const void *ap, const void *bp);
 
 //-----------------------------
 void logToFile(string message)
@@ -50,12 +50,12 @@ void logToFile(string message)
 //-----------------------------
 void log(string filename, short msgType, string msgText)
 {
-	otl_stream otlLog;
-	
+	static otl_connect otlLogConnect;
 	if (otlLogConnect.connected) {
 		if (msgText.length() > 2048)
 			msgText = msgText.substr(0, 2048);
 		try {
+			otl_stream otlLog;
 			otlLog.open(1, "insert into BILLING.TAP3LOADER_LOG (datetime, filename, msg_type, msg_text) "
 				"values (sysdate, :fn /*char[255]*/, :msg_type/*short*/, :msg_text /*char[2048]*/)", otlLogConnect);
 			otlLog << filename << msgType << msgText;
@@ -72,7 +72,14 @@ void log(string filename, short msgType, string msgText)
 		}
 	}
 	else {
-		logToFile(to_string(static_cast<unsigned long long> ( msgType )) + '\t' + msgText);
+		try {
+			otlLogConnect.rlogon(config.GetConnectString().c_str());
+			log(filename, msgType, msgText);
+		}
+		catch (otl_exception &otlEx) {
+			logToFile(to_string(static_cast<unsigned long long> ( msgType )) + '\t' + msgText);
+		}
+	
 	}
 }
 //------------------------------
@@ -300,7 +307,7 @@ double GetTaxRate(int nCode)
 	}
 }
 //-------------------------------
-long GetSenderNetworkID(long& iotValidationMode)
+long GetSenderNetworkID(long& iotValidationMode, otl_connect& otlConnect)
 {
 	otl_nocommit_stream otlStream;
 	otlStream.open(1, "call BILLING.TAP3.GetSenderNetworkID(:sender /*char[20],in*/) "
@@ -323,7 +330,7 @@ long GetSenderNetworkID(long& iotValidationMode)
 	return mobileNetworkID;
 }
 //-------------------------------
-double GetDiscountRate(int nCode, double& fixedDiscountVal)
+double GetDiscountRate(int nCode, double& fixedDiscountVal, otl_connect& otlConnect)
 {
 	if (dataInterchange) {
 		if(!dataInterchange->choice.transferBatch.accountingInfo->discounting) {
@@ -353,7 +360,7 @@ double GetDiscountRate(int nCode, double& fixedDiscountVal)
 	}
 }
 //-------------------------------
-long ProcessChrInfo(long long eventID, ChargeInformation* chargeInformation, char* szInfo)
+long ProcessChrInfo(long long eventID, ChargeInformation* chargeInformation, char* szInfo, otl_connect& otlConnect)
 {
 	// обработаем набор Charge Information
 	long chargeID;
@@ -413,7 +420,7 @@ long ProcessChrInfo(long long eventID, ChargeInformation* chargeInformation, cha
 			<< otl_null();
 
 	if (chargeInformation->discountInformation ) {
-		double discountRate = GetDiscountRate( *chargeInformation->discountInformation->discountCode, fixedDiscountValue );
+		double discountRate = GetDiscountRate( *chargeInformation->discountInformation->discountCode, fixedDiscountValue, otlConnect );
 		if ( discountRate > -1 )
 			otlStream << discountRate;
 		else
@@ -478,7 +485,7 @@ long ProcessChrInfo(long long eventID, ChargeInformation* chargeInformation, cha
 	return TL_OK;
 }
 //------------------------------------------------------
-long long ProcessOriginatedCall(long fileID, int index, const MobileOriginatedCall* pMCall)
+long long ProcessOriginatedCall(long fileID, int index, const MobileOriginatedCall* pMCall, otl_connect& otlConnect)
 {
 	// проверка наличия обязательных структур в Mobile Originated Call
 	if(!pMCall->basicCallInformation || !pMCall->locationInformation || !pMCall->basicServiceUsedList)
@@ -627,7 +634,8 @@ long long ProcessOriginatedCall(long fileID, int index, const MobileOriginatedCa
 		for(int chr_ind=0; chr_ind < pMCall->basicServiceUsedList->list.array[bs_ind]->chargeInformationList->list.count; chr_ind++)
 		{
 			sprintf(szChrInfo,"Call number %d. Basic Service number %d. Charge Information number %d",index,bs_ind,chr_ind);
-			chrinfoRes=ProcessChrInfo(basicSvcID, pMCall->basicServiceUsedList->list.array[bs_ind]->chargeInformationList->list.array[chr_ind], szChrInfo);
+			chrinfoRes = ProcessChrInfo(basicSvcID, 
+				pMCall->basicServiceUsedList->list.array[bs_ind]->chargeInformationList->list.array[chr_ind], szChrInfo, otlConnect);
 			if(chrinfoRes<0) return chrinfoRes;
 		}
 	}
@@ -637,7 +645,7 @@ long long ProcessOriginatedCall(long fileID, int index, const MobileOriginatedCa
 
 //-----------------------------
 
-long long ProcessTerminatedCall(long fileID, int index, const MobileTerminatedCall* pMCall)
+long long ProcessTerminatedCall(long fileID, int index, const MobileTerminatedCall* pMCall, otl_connect& otlConnect)
 {
 	// проверка наличия обязательных структур в Mobile Terminated Call
 	if(!pMCall->basicCallInformation || !pMCall->locationInformation || !pMCall->basicServiceUsedList)
@@ -783,7 +791,8 @@ long long ProcessTerminatedCall(long fileID, int index, const MobileTerminatedCa
 		for(int chr_ind=0; chr_ind < pMCall->basicServiceUsedList->list.array[bs_ind]->chargeInformationList->list.count; chr_ind++)
 		{
 			sprintf(szChrInfo,"Номер звонка %d\nНомер Basic Service %d\nНомер Charge Information %d",index,bs_ind,chr_ind);
-			chrinfoRes=ProcessChrInfo(basicSvcID, pMCall->basicServiceUsedList->list.array[bs_ind]->chargeInformationList->list.array[chr_ind], szChrInfo);
+			chrinfoRes = ProcessChrInfo(basicSvcID, 
+				pMCall->basicServiceUsedList->list.array[bs_ind]->chargeInformationList->list.array[chr_ind], szChrInfo, otlConnect);
 			if(chrinfoRes<0) return chrinfoRes;
 		}
 	}
@@ -794,7 +803,7 @@ long long ProcessTerminatedCall(long fileID, int index, const MobileTerminatedCa
 
 //-----------------------------
 
-long long ProcessGPRSCall(long fileID, int index, const GprsCall* pMCall)
+long long ProcessGPRSCall(long fileID, int index, const GprsCall* pMCall, otl_connect& otlConnect)
 {
 	// проверка наличия обязательных структур в Mobile Terminated Call
 	if(!pMCall->gprsBasicCallInformation|| !pMCall->gprsLocationInformation || !pMCall->gprsServiceUsed)
@@ -974,7 +983,7 @@ long long ProcessGPRSCall(long fileID, int index, const GprsCall* pMCall)
 	for(int chr_ind=0; chr_ind < pMCall->gprsServiceUsed->chargeInformationList->list.count; chr_ind++)
 	{
 		sprintf(szChrInfo,"Номер звонка %d\nНомер Charge Information %d", index, chr_ind);
-		chrinfoRes=ProcessChrInfo(eventID, pMCall->gprsServiceUsed->chargeInformationList->list.array[chr_ind], szChrInfo);
+		chrinfoRes=ProcessChrInfo(eventID, pMCall->gprsServiceUsed->chargeInformationList->list.array[chr_ind], szChrInfo, otlConnect);
 		if(chrinfoRes<0) return chrinfoRes;
 	}
 
@@ -982,7 +991,7 @@ long long ProcessGPRSCall(long fileID, int index, const GprsCall* pMCall)
 }
 
 //-----------------------------
-void Finalize(bool bSuccess = false)
+void Finalize(otl_connect& otlConnect, bool bSuccess)
 {
 	if( dataInterchange )     
 		ASN_STRUCT_FREE(asn_DEF_DataInterChange, dataInterchange);
@@ -999,14 +1008,11 @@ void Finalize(bool bSuccess = false)
 		otlConnect.logoff();
 	}
 
-	otlLogConnect.commit();
-	otlLogConnect.logoff();
-
 	if(ofsLog.is_open()) ofsLog.close();
 	if (buffer ) delete [] buffer;
 }
 //------------------------------
-int LoadTAPEventsToDB(long fileID, long iotValidationMode, long roamingHubID)
+int LoadTAPEventsToDB(long fileID, long iotValidationMode, long roamingHubID, otl_connect& otlConnect)
 {
 	long long eventID;
 	CallValidationResult validationRes;
@@ -1017,7 +1023,7 @@ int LoadTAPEventsToDB(long fileID, long iotValidationMode, long roamingHubID)
 		switch( dataInterchange->choice.transferBatch.callEventDetails->list.array[index]->present) {
 		case CallEventDetail_PR_mobileOriginatedCall:
 			if ((eventID = ProcessOriginatedCall(fileID, index + 1,
-					&dataInterchange->choice.transferBatch.callEventDetails->list.array[index]->choice.mobileOriginatedCall)) < 0) {
+					&dataInterchange->choice.transferBatch.callEventDetails->list.array[index]->choice.mobileOriginatedCall, otlConnect)) < 0) {
 				// ошибка загрузки
 				return (long) eventID;
 			}
@@ -1027,7 +1033,7 @@ int LoadTAPEventsToDB(long fileID, long iotValidationMode, long roamingHubID)
 			break;
 		case CallEventDetail_PR_mobileTerminatedCall:
 			if ((eventID = ProcessTerminatedCall(fileID, index+1, 
-					&dataInterchange->choice.transferBatch.callEventDetails->list.array[index]->choice.mobileTerminatedCall)) < 0) {
+					&dataInterchange->choice.transferBatch.callEventDetails->list.array[index]->choice.mobileTerminatedCall, otlConnect)) < 0) {
 				// ошибка загрузки
 				return (long)eventID;
 			}
@@ -1040,7 +1046,7 @@ int LoadTAPEventsToDB(long fileID, long iotValidationMode, long roamingHubID)
 			break;
 		case CallEventDetail_PR_gprsCall:
 			if ((eventID = ProcessGPRSCall(fileID, index+1, 
-					&dataInterchange->choice.transferBatch.callEventDetails->list.array[index]->choice.gprsCall)) < 0) {
+					&dataInterchange->choice.transferBatch.callEventDetails->list.array[index]->choice.gprsCall, otlConnect)) < 0) {
 				// ошибка загрузки
 				return (long) eventID;
 			}
@@ -1069,7 +1075,7 @@ int LoadTAPEventsToDB(long fileID, long iotValidationMode, long roamingHubID)
 	return TL_OK;
 }
 //----------------------------------
-void LoadNotificationHeader(long fileID, long roamingHubID, std::string filename, const TAPValidator& tapValidator)
+void LoadNotificationHeader(long fileID, long roamingHubID, std::string filename, const TAPValidator& tapValidator, otl_connect& otlConnect)
 {
 	otl_nocommit_stream otlStream;
 	otlStream.open( 1 /*stream buffer size in logical rows*/, 
@@ -1117,7 +1123,7 @@ void LoadNotificationHeader(long fileID, long roamingHubID, std::string filename
 	otlStream.close();
 }
 //----------------------------------------
-void LoadTransferBatchHeader(long fileID, long roamingHubID, std::string filename, const TAPValidator& tapValidator)
+void LoadTransferBatchHeader(long fileID, long roamingHubID, std::string filename, const TAPValidator& tapValidator, otl_connect& otlConnect)
 {
 	otl_nocommit_stream otlStream;
 	otlStream.open(1 /*stream buffer size in logical rows*/,
@@ -1220,7 +1226,7 @@ void LoadTransferBatchHeader(long fileID, long roamingHubID, std::string filenam
 	otlStream.close();
 }
 //----------------------------------------
-int LoadTAPFileToDB( unsigned char* buffer, long dataLen, long fileID, long roamingHubID, bool bPrintOnly ) 
+int LoadTAPFileToDB( unsigned char* buffer, long dataLen, long fileID, long roamingHubID, bool bPrintOnly, otl_connect& otlConnect ) 
 {
 	int index=0;
 	try {
@@ -1229,7 +1235,7 @@ int LoadTAPFileToDB( unsigned char* buffer, long dataLen, long fileID, long roam
 		if(rval.code != RC_OK) {
 			log( LOG_ERROR, string("Ошибка ASN-декодирования файла. Код ошибки ") + 
 				to_string( static_cast<unsigned long long> (rval.code)));
-			Finalize();
+			Finalize(otlConnect, false);
 			return TL_DECODEERROR;
 		}
 		if( bPrintOnly ) {
@@ -1262,12 +1268,12 @@ int LoadTAPFileToDB( unsigned char* buffer, long dataLen, long fileID, long roam
 		
 		otl_nocommit_stream otlStream;
 		if (dataInterchange->present == DataInterChange_PR_notification) {
-			LoadNotificationHeader(fileID, roamingHubID, pShortName, tapValidator);
+			LoadNotificationHeader(fileID, roamingHubID, pShortName, tapValidator, otlConnect);
 		}
 		else {
-			LoadTransferBatchHeader(fileID, roamingHubID, pShortName, tapValidator);
+			LoadTransferBatchHeader(fileID, roamingHubID, pShortName, tapValidator, otlConnect);
 			if (tapValidator.GetValidationResult() != FATAL_ERROR) {
-				return LoadTAPEventsToDB(fileID, tapValidator.GetIOTValidationMode(), roamingHubID);
+				return LoadTAPEventsToDB(fileID, tapValidator.GetIOTValidationMode(), roamingHubID, otlConnect);
 			}
 			else {
 				return TL_OK;
@@ -1295,7 +1301,8 @@ int LoadTAPFileToDB( unsigned char* buffer, long dataLen, long fileID, long roam
 
 //-----------------------------------------------------
 
-int LoadRAPStopOrMissingInfo(long fileID, string stopLastSeqNum, string missStartSeqNum, string missEndSeqNum, OperatorSpecList* pOperSpecList)
+int LoadRAPStopOrMissingInfo(long fileID, string stopLastSeqNum, string missStartSeqNum, string missEndSeqNum, 
+	OperatorSpecList* pOperSpecList, otl_connect& otlConnect)
 {
 	string operSpecInfo;
 	if (pOperSpecList) {
@@ -1328,7 +1335,7 @@ int LoadRAPStopOrMissingInfo(long fileID, string stopLastSeqNum, string missStar
 
 //------------------------------------------------
 
-int LoadRAPErrorDetailList(const ErrorDetailList_t* pErrDetailList, long returnID)
+int LoadRAPErrorDetailList(const ErrorDetailList_t* pErrDetailList, long returnID, otl_connect& otlConnect)
 {
 	otl_nocommit_stream otlStream;
 
@@ -1409,7 +1416,7 @@ int LoadRAPErrorDetailList(const ErrorDetailList_t* pErrDetailList, long returnI
 
 //------------------------------------------------
 
-int LoadRAPFatalReturn(long fileID, const FatalReturn& fatalReturn)
+int LoadRAPFatalReturn(long fileID, const FatalReturn& fatalReturn, otl_connect& otlConnect)
 {
 	string errorType;
 	ErrorDetailList_t* pErrDetailList;
@@ -1472,12 +1479,12 @@ int LoadRAPFatalReturn(long fileID, const FatalReturn& fatalReturn)
 	otlStream >> returnID;
 	otlStream.close();
 
-	return LoadRAPErrorDetailList(pErrDetailList, returnID);
+	return LoadRAPErrorDetailList(pErrDetailList, returnID, otlConnect);
 }
 
 //------------------------------------------------
 
-int LoadRAPSevereReturn(long fileID, const SevereReturn& severeReturn)
+int LoadRAPSevereReturn(long fileID, const SevereReturn& severeReturn, otl_connect& otlConnect)
 {
 	int index = 0;
 
@@ -1496,12 +1503,12 @@ int LoadRAPSevereReturn(long fileID, const SevereReturn& severeReturn)
 	long long eventID; 
 	switch (severeReturn.callEventDetail.present) {
 		case CallEventDetail_PR_mobileOriginatedCall:
-			if ((eventID = ProcessOriginatedCall(fileID, index, &severeReturn.callEventDetail.choice.mobileOriginatedCall)) < 0)
+			if ((eventID = ProcessOriginatedCall(fileID, index, &severeReturn.callEventDetail.choice.mobileOriginatedCall, otlConnect)) < 0)
 				return (long) eventID;
 			
 			break;
 		case CallEventDetail_PR_mobileTerminatedCall:
-			if ((eventID = ProcessTerminatedCall(fileID, index, &severeReturn.callEventDetail.choice.mobileTerminatedCall)) < 0)
+			if ((eventID = ProcessTerminatedCall(fileID, index, &severeReturn.callEventDetail.choice.mobileTerminatedCall, otlConnect)) < 0)
 				return (long) eventID;
 			
 			break;
@@ -1510,7 +1517,7 @@ int LoadRAPSevereReturn(long fileID, const SevereReturn& severeReturn)
 			break;
 
 		case CallEventDetail_PR_gprsCall:
-			if ((eventID = ProcessGPRSCall(fileID, index, &severeReturn.callEventDetail.choice.gprsCall)) < 0)
+			if ((eventID = ProcessGPRSCall(fileID, index, &severeReturn.callEventDetail.choice.gprsCall, otlConnect)) < 0)
 				return (long) eventID;
 			
 			break;
@@ -1540,12 +1547,12 @@ int LoadRAPSevereReturn(long fileID, const SevereReturn& severeReturn)
 	otlStream >> returnID;
 	otlStream.close();
 
-	return LoadRAPErrorDetailList(&severeReturn.errorDetail, returnID);
+	return LoadRAPErrorDetailList(&severeReturn.errorDetail, returnID, otlConnect);
 }
 
 //-----------------------------------------------------
 
-int LoadReturnBatchToDB(ReturnBatch* returnBatch, long fileID, long roamingHubID, string rapFilename, long fileStatus)
+int LoadReturnBatchToDB(ReturnBatch* returnBatch, long fileID, long roamingHubID, string rapFilename, long fileStatus, otl_connect& otlConnect)
 {
 		// set TAP power value used to convert integer values from file to double values for DB
 	double dblTAPPower;
@@ -1620,20 +1627,20 @@ int LoadReturnBatchToDB(ReturnBatch* returnBatch, long fileID, long roamingHubID
 			switch (returnBatch->returnDetails.list.array[i]->present) {
 			case ReturnDetail_PR_stopReturn:
 				loadResult = LoadRAPStopOrMissingInfo(fileID, (char*)returnBatch->returnDetails.list.array[i]->choice.stopReturn.lastSeqNumber.buf, "", "",
-					returnBatch->returnDetails.list.array[i]->choice.stopReturn.operatorSpecList);
+					returnBatch->returnDetails.list.array[i]->choice.stopReturn.operatorSpecList, otlConnect);
 				break;
 			case ReturnDetail_PR_missingReturn:
 				loadResult = LoadRAPStopOrMissingInfo(fileID, "",
 					(char*) returnBatch->returnDetails.list.array[i]->choice.missingReturn.startMissingSeqNumber.buf, 
 					returnBatch->returnDetails.list.array[i]->choice.missingReturn.endMissingSeqNumber ?
 						(char*) returnBatch->returnDetails.list.array[i]->choice.missingReturn.endMissingSeqNumber->buf : "",
-					returnBatch->returnDetails.list.array[i]->choice.stopReturn.operatorSpecList);
+					returnBatch->returnDetails.list.array[i]->choice.stopReturn.operatorSpecList, otlConnect);
 				break;
 			case ReturnDetail_PR_fatalReturn:
-				loadResult = LoadRAPFatalReturn(fileID, returnBatch->returnDetails.list.array[i]->choice.fatalReturn);
+				loadResult = LoadRAPFatalReturn(fileID, returnBatch->returnDetails.list.array[i]->choice.fatalReturn, otlConnect);
 				break;
 			case ReturnDetail_PR_severeReturn:
-				loadResult = LoadRAPSevereReturn(fileID, returnBatch->returnDetails.list.array[i]->choice.severeReturn);
+				loadResult = LoadRAPSevereReturn(fileID, returnBatch->returnDetails.list.array[i]->choice.severeReturn, otlConnect);
 				break;
 			default:
 				log(LOG_ERROR, "Неизвестная структура Return Detail: " + to_string(static_cast<unsigned long long> 
@@ -1660,7 +1667,7 @@ int LoadReturnBatchToDB(ReturnBatch* returnBatch, long fileID, long roamingHubID
 
 //--------------------------------------------------
 
-int LoadRAPFileToDB( unsigned char* buffer, long dataLen, long fileID, long roamingHubID, bool bPrintOnly ) 
+int LoadRAPFileToDB( unsigned char* buffer, long dataLen, long fileID, long roamingHubID, bool bPrintOnly, otl_connect& otlConnect ) 
 {
 	int index=0;
 	try {
@@ -1671,7 +1678,7 @@ int LoadRAPFileToDB( unsigned char* buffer, long dataLen, long fileID, long roam
 		if (rval.code != RC_OK) {
 			log(LOG_ERROR, string("Ошибка ASN-декодирования файла. Код ошибки ") + to_string(
 				static_cast<unsigned long long> ( rval.code )));
-			Finalize();
+			Finalize(otlConnect, false);
 			return TL_DECODEERROR;
 		}
 
@@ -1692,7 +1699,7 @@ int LoadRAPFileToDB( unsigned char* buffer, long dataLen, long fileID, long roam
 			return TL_OK;
 		}
 	
-		return LoadReturnBatchToDB(returnBatch, fileID, roamingHubID, pShortName, INFILE_STATUS_NEW);
+		return LoadReturnBatchToDB(returnBatch, fileID, roamingHubID, pShortName, INFILE_STATUS_NEW, otlConnect);
 	}
 	catch(char* pMess)
 	{
@@ -1704,7 +1711,7 @@ int LoadRAPFileToDB( unsigned char* buffer, long dataLen, long fileID, long roam
 
 //------------------------------
 
-int LoadRAPAckToDB(unsigned char* buffer, long dataLen, long fileID, long roamingHubID, bool bPrintOnly)
+int LoadRAPAckToDB(unsigned char* buffer, long dataLen, long fileID, long roamingHubID, bool bPrintOnly, otl_connect& otlConnect)
 {
 	asn_dec_rval_t rval;
 
@@ -1713,7 +1720,7 @@ int LoadRAPAckToDB(unsigned char* buffer, long dataLen, long fileID, long roamin
 	if (rval.code != RC_OK) {
 		log(LOG_ERROR, string("Ошибка ASN-декодирования файла. Код ошибки ") + to_string(
 			static_cast<unsigned long long> (rval.code)));
-		Finalize();
+		Finalize(otlConnect, false);
 		return TL_DECODEERROR;
 	}
 
@@ -1803,6 +1810,8 @@ int main(int argc, const char* argv[])
 		return TL_FILEERROR ;
 	}
 
+	otl_connect::otl_initialize(); // initialize OCI environment
+	otl_connect otlConnect;
 	// установим тип файла
 	FileType fileType;
 	if( !strnicmp(pShortName, "CD", 2) || !strnicmp(pShortName, "TD", 2))
@@ -1814,7 +1823,7 @@ int main(int argc, const char* argv[])
 	else {
 		log(LOG_ERROR, string("Неизвестный тип TAP-файла. Первые буквы имени файла должы быть CD, TD, RC, RT, AC "
 			" или AT. Для разбора же передан файл ") + argv[1]);
-		Finalize();
+		Finalize(otlConnect, false);
 		return TL_FILEERROR;
 	}
 
@@ -1870,11 +1879,10 @@ int main(int argc, const char* argv[])
 			}
 		}
 
-		// DB connect
-		otl_connect::otl_initialize(); // initialize OCI environment
+		//otl_connect otlLogConnect;
 		try {
 			otlConnect.rlogon(config.GetConnectString().c_str());	
-			otlLogConnect.rlogon(config.GetConnectString().c_str());	
+			//otlLogConnect.rlogon(config.GetConnectString().c_str());	
 		}
 		catch (otl_exception &otlEx) {
 			log( LOG_ERROR, "Невозможно подключиться к базе данных:" );
@@ -1892,37 +1900,37 @@ int main(int argc, const char* argv[])
 		switch( fileType ) {
 		case ftTAP:
 			log(LOG_INFO, "--------- Загрузка TAP3-файла (ID " + to_string((long long) fileID)+") начата ---------");
-			res = LoadTAPFileToDB( buffer, tapFileLen, fileID, roamingHubID, bPrintOnly ) ; 
+			res = LoadTAPFileToDB( buffer, tapFileLen, fileID, roamingHubID, bPrintOnly, otlConnect ) ; 
 			if (res == TL_OK)
 				log(LOG_INFO, "--------- Загрузка TAP3-файла (ID " + to_string((long long)fileID) + 
 					") завершена успешно ---------");
 			else
 				log(LOG_INFO, "--------- Загрузка TAP3-файла (ID " + to_string((long long)fileID) + 
 					") завершена с ошибками ---------");
-			Finalize( res == TL_OK );
+			Finalize(otlConnect, res == TL_OK);
 			return res;
 		case ftRAP:
 			log(LOG_INFO, "--------- Загрузка RAP-файла (ID " + to_string((long long) fileID) + ") начата ---------");
-			res = LoadRAPFileToDB( buffer, tapFileLen, fileID, roamingHubID, bPrintOnly ) ; 
+			res = LoadRAPFileToDB( buffer, tapFileLen, fileID, roamingHubID, bPrintOnly, otlConnect ) ; 
 			if (res == TL_OK)
 				log(LOG_INFO, "--------- Загрузка RAP-файла (ID " + to_string((long long)fileID) + 
 					") завершена успешно ---------");
 			else
 				log(LOG_INFO, "--------- Загрузка RAP-файла (ID " + to_string((long long)fileID) + 
 					") завершена с ошибками ---------");
-			Finalize( res == TL_OK );
+			Finalize(otlConnect, res == TL_OK);
 			return res;
 		case ftRAPAcknowledgement:
 			log(LOG_INFO, "--------- Загрузка RAP Acknowledgement-файла (ID " + to_string((long long) fileID) + 
 					") начата ---------");
-			res = LoadRAPAckToDB(buffer, tapFileLen, fileID, roamingHubID, bPrintOnly);
+			res = LoadRAPAckToDB(buffer, tapFileLen, fileID, roamingHubID, bPrintOnly, otlConnect);
 			if (res == TL_OK)
 				log(LOG_INFO, "--------- Загрузка RAP Acknowledgement-файла (ID " + to_string((long long)fileID) + 
 					") завершена успешно ---------");
 			else
 				log(LOG_INFO, "--------- Загрузка RAP Acknowledgement-файла (ID " + to_string((long long)fileID) + 
 					") завершена с ошибками ---------");
-			Finalize( res == TL_OK );
+			Finalize(otlConnect, res == TL_OK);
 			return res;
 		}
 		
@@ -1931,11 +1939,11 @@ int main(int argc, const char* argv[])
 	{
 		log( LOG_ERROR, "Неизвестное исключение. Номер звонка " + to_string( static_cast<unsigned long long> 
 				(index)));
-		Finalize();
+		Finalize(otlConnect, false);
 		return TL_UNKNOWN;
 	}
 
-	Finalize(true);
+	//Finalize(otlConnect, true);
 
 	return TL_OK;
 }
@@ -1945,6 +1953,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 	switch (fdwReason)
 	{
 	case DLL_PROCESS_ATTACH:
+		InitializeCriticalSection(&loadCritSection);
 		break;
 	case DLL_THREAD_ATTACH:
 		// A process is creating a new thread.
@@ -1953,6 +1962,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 		// A thread exits normally.
 		break;
 	case DLL_PROCESS_DETACH:
+		DeleteCriticalSection(&loadCritSection);
 		break;
 	}
 	return TRUE;
@@ -1961,9 +1971,10 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 
 __declspec (dllexport) int __stdcall LoadFileToDB(char* pFilename, long fileID, long roamingHubID, char* pConfigFilename)
 {
+	EnterCriticalSection(&loadCritSection);
 	string strFileID = to_string ((unsigned long long) fileID);
 	string strRoamHubID = to_string((unsigned long long) roamingHubID);
 	const char* pArgv[] = { "TAP3Loader.exe", pFilename, strFileID.c_str(), strRoamHubID.c_str(), pConfigFilename };
-
+	LeaveCriticalSection(&loadCritSection);
 	return main(mainArgsCount, pArgv);
 }

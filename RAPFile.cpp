@@ -12,7 +12,8 @@ using namespace std;
 extern void log(string filename, short msgType, string msgText);
 extern void log(short msgType, string msgText);
 extern long long OctetStr2Int64(const OCTET_STRING_t& octetStr);
-extern int LoadReturnBatchToDB(ReturnBatch* returnBatch, long fileID, long roamingHubID, string rapFilename, long fileStatus);
+extern int LoadReturnBatchToDB(ReturnBatch* returnBatch, long fileID, long roamingHubID, string rapFilename, 
+	long fileStatus, otl_connect& otlConnect);
 extern int write_out(const void *buffer, size_t size, void *app_key);
 extern "C" int ncftp_main(int argc, char **argv, char* result);
 
@@ -171,7 +172,7 @@ int RAPFile::LoadToDB()
 {
 	OctetString_fromInt64(m_returnBatch->rapAuditControlInfo.totalSevereReturnValue, m_totalSevereReturn);
 	m_returnBatch->rapAuditControlInfo.returnDetailsCount = m_returnDetailsCount;
-	return LoadReturnBatchToDB(m_returnBatch, m_fileID, m_roamingHubID, m_filename, OUTFILE_CREATED_AND_SENT);
+	return LoadReturnBatchToDB(m_returnBatch, m_fileID, m_roamingHubID, m_filename, OUTFILE_CREATED_AND_SENT, m_otlConnect);
 }
 
 
