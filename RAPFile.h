@@ -32,4 +32,11 @@ private:
 	bool UploadFileToFtp(string filename, string fullFileName, FtpSetting ftpSetting);	
 };
 
-
+class RAPFileException : public std::runtime_error
+{
+public:
+	explicit RAPFileException(const string& what_arg) :
+		std::runtime_error(what_arg)
+	{}
+	
+};

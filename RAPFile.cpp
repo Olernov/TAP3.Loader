@@ -86,10 +86,9 @@ bool RAPFile::Initialize(string tapSender, string tapRecipient, string tapAvaila
 		>> m_fileID;
 	
 	if (m_fileID < 0) {
-		log(LOG_ERROR, "Функция TAP3.CreateRAPFileByTAPLoader вернула ошибку " + to_string((long long) m_fileID) +
+		throw RAPFileException("Функция TAP3.CreateRAPFileByTAPLoader вернула ошибку " + to_string((long long)m_fileID) +
 			". Возможно, ТАР-файл был получен от одного роумингового координатора, а сеть приписана к другому "
 			"(справочник \"Привязка к роуминговому координатору\"). Файл не был загружен.");
-		return false;
 	}
 	m_returnBatch = (ReturnBatch*) calloc(1, sizeof(ReturnBatch));
 	// sender and recipient switch their places
@@ -152,18 +151,15 @@ bool RAPFile::UploadFileToFtp(string filename, string fullFileName, FtpSetting f
 		char szFtpResult[4096];
 		int ftpResult = ncftp_main(ncftp_argc, (char**) pszArguments, szFtpResult);
 		if (ftpResult != 0) {
-			log(filename, LOG_ERROR, string("Ошибка при загрузке файла ") + filename + " на FTP-сервер" + 
-				ftpSetting.ftpServer + ":");
-			log(filename, LOG_ERROR, szFtpResult);
-			return false;
+			throw RAPFileException(string("Ошибка при загрузке файла ") + filename + " на FTP-сервер" +
+				ftpSetting.ftpServer + ":\n" + szFtpResult);
 		}
 		log(filename, LOG_INFO, "Файл успешно загружен на FTP-сервер " + ftpSetting.ftpServer);
 		return true;
 	}
 	catch (...) {
-		log(filename, LOG_ERROR, "Ошибка при загрузке файла " + filename + " на FTP-сервер " 
+		throw RAPFileException("Ошибка при загрузке файла " + filename + " на FTP-сервер " 
 			+ ftpSetting.ftpServer + ". Загрузка не удалась.");
-		return false;
 	}
 }
 
@@ -187,17 +183,15 @@ int RAPFile::EncodeAndUpload()
 
 	FILE *fTapFile = fopen(fullFileName.c_str(), "wb");
 	if (!fTapFile) {
-		log(m_filename, LOG_ERROR, string("Невозможно открыть файл ") + fullFileName + " для записи");
-		return TL_FILEERROR;
+		throw RAPFileException(string("Невозможно открыть файл ") + fullFileName + " для записи");
 	}
 	asn_enc_rval_t encodeRes = der_encode(&asn_DEF_ReturnBatch, m_returnBatch, write_out, fTapFile);
 
 	fclose(fTapFile);
 
 	if (encodeRes.encoded == -1) {
-		log(m_filename, LOG_ERROR, string("Ошибка во время ASN-декодирования файла. Код ошибки: ") + 
+		throw RAPFileException(string("Ошибка во время ASN-декодирования файла. Код ошибки: ") + 
 			string(encodeRes.failed_type ? encodeRes.failed_type->name : "<неизвестный код>"));
-		return TL_DECODEERROR;
 	}
 
 	log(m_filename, LOG_INFO, "RAP-файл для роумингового координатора " + m_roamingHubName + 

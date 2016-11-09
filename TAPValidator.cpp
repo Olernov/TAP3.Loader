@@ -58,8 +58,6 @@ bool TAPValidator::SetSenderNetworkID()
 	otlStream >> m_mobileNetworkID;
 	otlStream.close();
 	if (m_mobileNetworkID < 0) {
-		log(LOG_ERROR, "Невозможно найти в базе сеть отправителя по TAP-коду. Проверьте корректность "
-			"ее заведения. Файл не был загружен.");
 		return false;
 	}
 	return true;
@@ -121,7 +119,7 @@ FileDuplicationCheckRes TAPValidator::IsFileDuplicated()
 	otlStream.close();
 	if(result < 0)
 	{
-		log(LOG_ERROR, "Функция TAP3.IsTAPFileDuplicated вернула ошибку " + to_string((long long) result));
+		SetErrorAndLog("Функция TAP3.IsTAPFileDuplicated вернула ошибку " + to_string((long long) result));
 		result = DUPLICATION_CHECK_ERROR;
 	}
 	return (FileDuplicationCheckRes) result;
@@ -153,7 +151,7 @@ IncomingTAPAllowed TAPValidator::IsIncomingTAPAllowed()
 	otlStream.close();
 	if(result < 0)
 	{
-		log(LOG_ERROR, "Функция TAP3.IsIncomingTAPAllowed вернула ошибку " + to_string((long long) result));
+		SetErrorAndLog("Функция TAP3.IsIncomingTAPAllowed вернула ошибку " + to_string((long long) result));
 		result = UNABLE_TO_DETERMINE;
 	}
 	return (IncomingTAPAllowed) result;
@@ -307,9 +305,31 @@ long long TAPValidator::BatchTotalCharge()
 }
 
 
+int TAPValidator::CreateAndUploadRapFile(ReturnDetail* returnDetail)
+{
+	assert(m_transferBatch || m_notification);
+	try {
+		if (m_transferBatch) {
+			m_rapFile.Initialize(m_transferBatch);
+		}
+		else {
+			m_rapFile.Initialize(m_notification);
+		}
+		m_rapFile.AddReturnDetail(returnDetail, 0);
+		m_rapFile.Finalize();
+		m_rapFile.LoadToDB();
+		return m_rapFile.EncodeAndUpload();
+	}
+	catch(const RAPFileException& ex) {
+		SetErrorAndLog(string(ex.what()));
+		return TL_TAP_NOT_VALIDATED;
+	}
+}
+
+
 int TAPValidator::CreateBatchControlInfoRAPFile(string logMessage, int errorCode, const vector<ErrContextAsnItem>& asnItems)
 {
-	log(LOG_ERROR, "Валидация Batch Control Info: " + logMessage + ". Создание RAP-файла ... ");
+	SetErrorAndLog("Валидация Batch Control Info: " + logMessage);
 	ReturnDetail* returnDetail = (ReturnDetail*) calloc(1, sizeof(ReturnDetail));
 	returnDetail->present = ReturnDetail_PR_fatalReturn;
 	OCTET_STRING_fromBuf(&returnDetail->choice.fatalReturn.fileSequenceNumber, 
@@ -352,13 +372,7 @@ int TAPValidator::CreateBatchControlInfoRAPFile(string logMessage, int errorCode
 	assert(m_transferBatch->batchControlInfo->recipient);
 	assert(m_transferBatch->batchControlInfo->fileAvailableTimeStamp);
 
-	int rapInitRes = m_rapFile.Initialize(m_transferBatch);
-	if (rapInitRes != TL_OK)
-		return rapInitRes;
-	m_rapFile.AddReturnDetail(returnDetail, 0);
-	m_rapFile.Finalize();
-	m_rapFile.LoadToDB();
-	int loadRes = m_rapFile.EncodeAndUpload();
+	int loadRes = CreateAndUploadRapFile(returnDetail);
 
 	// Clear previously copied pointers to avoid ASN_STRUCT_FREE errors
 	returnDetail->choice.fatalReturn.batchControlError->batchControlInfo.sender = NULL;
@@ -391,7 +405,7 @@ TAPValidationResult TAPValidator::FileSequenceNumberControl()
 		case DUPLICATION_FOUND:
 			asnItems.push_back(ErrContextAsnItem(&asn_DEF_FileSequenceNumber, 0));
 			createRapRes = CreateBatchControlInfoRAPFile(
-				"Дублирование: Файл, имеющий тот же последовательный номер, уже был загружен и обработан. Создание RAP-файла...",
+				"Дублирование: Файл, имеющий тот же последовательный номер, уже был загружен и обработан.",
 				FILE_SEQ_NUM_DUPLICATION, asnItems);
 			return ( createRapRes >= 0 ? FILE_DUPLICATION : VALIDATION_IMPOSSIBLE );
 		case DUPLICATION_CHECK_ERROR:
@@ -404,12 +418,12 @@ TAPValidationResult TAPValidator::ValidateBatchControlInfo()
 {
 	if (!m_transferBatch->batchControlInfo->sender || !m_transferBatch->batchControlInfo->recipient || 
 			!m_transferBatch->batchControlInfo->fileSequenceNumber) {
-		log(LOG_ERROR, "Валидация: Sender, Recipient или FileSequenceNumber отсутствуют в Batch Control Info.");
+		SetErrorAndLog(std::string("Валидация: Sender, Recipient или FileSequenceNumber отсутствуют в Batch Control Info."));
 		return VALIDATION_IMPOSSIBLE;
 	}
 
 	if(!IsRecipientCorrect((char*) m_transferBatch->batchControlInfo->recipient->buf)) {
-		log(LOG_ERROR, "Валидация: Некорректный получатель " + string((char*) m_transferBatch->batchControlInfo->
+		SetErrorAndLog("Валидация: Некорректный получатель " + string((char*) m_transferBatch->batchControlInfo->
 			recipient->buf) + " Файл адресован другому получателю.");
 		return VALIDATION_IMPOSSIBLE;
 	}
@@ -457,7 +471,7 @@ TAPValidationResult TAPValidator::ValidateBatchControlInfo()
 
 int TAPValidator::CreateAccountingInfoRAPFile(string logMessage, int errorCode, const vector<ErrContextAsnItem>& asnItems)
 {
-	log(LOG_ERROR, "Валидация Accounting Info: " + logMessage + ". Создание RAP-файла ...");
+	SetErrorAndLog("Валидация Accounting Info: " + logMessage);
 	ReturnDetail* returnDetail = (ReturnDetail*) calloc(1, sizeof(ReturnDetail));
 	returnDetail->present = ReturnDetail_PR_fatalReturn;
 	OCTET_STRING_fromBuf(&returnDetail->choice.fatalReturn.fileSequenceNumber, (const char*) m_transferBatch->batchControlInfo->fileSequenceNumber->buf, 
@@ -499,14 +513,8 @@ int TAPValidator::CreateAccountingInfoRAPFile(string logMessage, int errorCode, 
 	assert(m_transferBatch->batchControlInfo->recipient);
 	assert(m_transferBatch->batchControlInfo->fileAvailableTimeStamp);
 
-	if (!m_rapFile.Initialize(m_transferBatch))
-		return TL_TAP_NOT_VALIDATED;
-
-	m_rapFile.AddReturnDetail(returnDetail, 0);
-	m_rapFile.Finalize();
-	m_rapFile.LoadToDB();
-	int loadRes = m_rapFile.EncodeAndUpload();
-
+	int loadRes = CreateAndUploadRapFile(returnDetail);
+	
 	// Clear previously copied pointers to avoid ASN_STRUCT_FREE errors
 	returnDetail->choice.fatalReturn.accountingInfoError->accountingInfo.currencyConversionInfo = NULL;
 	returnDetail->choice.fatalReturn.accountingInfoError->accountingInfo.discounting = NULL;
@@ -704,7 +712,7 @@ TAPValidationResult TAPValidator::ValidateAccountingInfo()
 						"\" is not set in IRBiS";
 					break;
 				}
-			log(LOG_ERROR, "Невозможно проверить курсы обмена валют, код ошибки " + to_string((long long) validationRes) +
+			SetErrorAndLog("Невозможно проверить курсы обмена валют, код ошибки " + to_string((long long) validationRes) +
 				" (" + logMessage + ")");
 			return VALIDATION_IMPOSSIBLE;
 		}
@@ -780,7 +788,7 @@ TAPValidationResult TAPValidator::ValidateAccountingInfo()
 
 int TAPValidator::CreateNetworkInfoRAPFile(string logMessage, int errorCode, const vector<ErrContextAsnItem>& asnItems)
 {
-	log(LOG_ERROR, "Валидация Network Info: " + logMessage + ". Создание RAP-файла ...");
+	SetErrorAndLog("Валидация Network Info: " + logMessage);
 	ReturnDetail* returnDetail = (ReturnDetail*) calloc(1, sizeof(ReturnDetail));
 	returnDetail->present = ReturnDetail_PR_fatalReturn;
 	OCTET_STRING_fromBuf(&returnDetail->choice.fatalReturn.fileSequenceNumber, (const char*) m_transferBatch->batchControlInfo->fileSequenceNumber->buf, 
@@ -822,12 +830,7 @@ int TAPValidator::CreateNetworkInfoRAPFile(string logMessage, int errorCode, con
 	assert(m_transferBatch->batchControlInfo->recipient);
 	assert(m_transferBatch->batchControlInfo->fileAvailableTimeStamp);
 
-	if (!m_rapFile.Initialize(m_transferBatch))
-		return TL_TAP_NOT_VALIDATED;
-	m_rapFile.AddReturnDetail(returnDetail, 0);
-	m_rapFile.Finalize();
-	m_rapFile.LoadToDB();
-	int loadRes = m_rapFile.EncodeAndUpload();
+	int loadRes = CreateAndUploadRapFile(returnDetail);
 
 	// Clear previously copied pointers to avoid ASN_STRUCT_FREE errors
 	returnDetail->choice.fatalReturn.networkInfoError->networkInfo.recEntityInfo = NULL;
@@ -894,7 +897,7 @@ TAPValidationResult TAPValidator::ValidateNetworkInfo()
 
 int TAPValidator::CreateAuditControlInfoRAPFile(string logMessage, int errorCode, const vector<ErrContextAsnItem>& asnItems)
 {
-	log(LOG_ERROR, "Валидация Audit Control Info: " + logMessage + ". Создание RAP-файла ...");
+	SetErrorAndLog("Валидация Audit Control Info: " + logMessage);
 	ReturnDetail* returnDetail = (ReturnDetail*) calloc(1, sizeof(ReturnDetail));
 	returnDetail->present = ReturnDetail_PR_fatalReturn;
 	OCTET_STRING_fromBuf(&returnDetail->choice.fatalReturn.fileSequenceNumber, (const char*) m_transferBatch->batchControlInfo->fileSequenceNumber->buf, 
@@ -936,12 +939,7 @@ int TAPValidator::CreateAuditControlInfoRAPFile(string logMessage, int errorCode
 	assert(m_transferBatch->batchControlInfo->sender);
 	assert(m_transferBatch->batchControlInfo->fileAvailableTimeStamp);
 
-	if (!m_rapFile.Initialize(m_transferBatch))
-		return TL_TAP_NOT_VALIDATED;
-	m_rapFile.AddReturnDetail(returnDetail, 0);
-	m_rapFile.Finalize();
-	m_rapFile.LoadToDB();
-	int loadRes = m_rapFile.EncodeAndUpload();
+	int loadRes = CreateAndUploadRapFile(returnDetail);
 
 	// Clear previously copied pointers to avoid ASN_STRUCT_FREE errors
 	returnDetail->choice.fatalReturn.auditControlInfoError->auditControlInfo.callEventDetailsCount = NULL;
@@ -1008,7 +1006,7 @@ TAPValidationResult TAPValidator::ValidateAuditControlInfo()
 
 int TAPValidator::CreateTransferBatchRAPFile(string logMessage, int errorCode)
 {
-	log(LOG_ERROR, "Валидация Transfer Batch: " + logMessage + ". Создание RAP-файла ...");
+	SetErrorAndLog("Валидация Transfer Batch: " + logMessage);
 	ReturnDetail* returnDetail = (ReturnDetail*) calloc(1, sizeof(ReturnDetail));
 	returnDetail->present = ReturnDetail_PR_fatalReturn;
 	OCTET_STRING_fromBuf(&returnDetail->choice.fatalReturn.fileSequenceNumber, (const char*)m_transferBatch->batchControlInfo->fileSequenceNumber->buf, 
@@ -1029,14 +1027,7 @@ int TAPValidator::CreateTransferBatchRAPFile(string logMessage, int errorCode)
 	assert(m_transferBatch->batchControlInfo->recipient);
 	assert(m_transferBatch->batchControlInfo->fileAvailableTimeStamp);
 	
-	if (!m_rapFile.Initialize(m_transferBatch))
-		return TL_TAP_NOT_VALIDATED;
-	m_rapFile.AddReturnDetail(returnDetail, 0);
-	m_rapFile.Finalize();
-	m_rapFile.LoadToDB();
-	int loadRes = m_rapFile.EncodeAndUpload();
-
-	return loadRes;
+	return CreateAndUploadRapFile(returnDetail);
 }
 
 
@@ -1091,7 +1082,7 @@ TAPValidationResult TAPValidator::ValidateTransferBatch()
 
 int TAPValidator::CreateNotificationRAPFile(string logMessage, int errorCode, const vector<ErrContextAsnItem>& asnItems)
 {
-	log(LOG_ERROR, "Валидация Notification: " + logMessage + ". Создание RAP-файла ...");
+	SetErrorAndLog("Валидация Notification: " + logMessage);
 	ReturnDetail* returnDetail = (ReturnDetail*) calloc(1, sizeof(ReturnDetail));
 	returnDetail->present = ReturnDetail_PR_fatalReturn;
 	OCTET_STRING_fromBuf(&returnDetail->choice.fatalReturn.fileSequenceNumber, (const char*) m_notification->fileSequenceNumber->buf, 
@@ -1123,15 +1114,8 @@ int TAPValidator::CreateNotificationRAPFile(string logMessage, int errorCode, co
 	assert(m_notification->sender);
 	assert(m_notification->recipient);
 	assert(m_notification->fileAvailableTimeStamp);
-
-	if (!m_rapFile.Initialize(m_notification))
-		return TL_TAP_NOT_VALIDATED;
-	m_rapFile.AddReturnDetail(returnDetail, 0);
-	m_rapFile.Finalize();
-	m_rapFile.LoadToDB();
-	int loadRes = m_rapFile.EncodeAndUpload();
-
-	return loadRes;
+	
+	return CreateAndUploadRapFile(returnDetail);
 }
 
 
@@ -1140,12 +1124,12 @@ TAPValidationResult TAPValidator::ValidateNotification()
 	assert(m_notification);
 	assert(!m_transferBatch);
 	if (!m_notification->sender || !m_notification->recipient || !m_notification->fileSequenceNumber) {
-		log(LOG_ERROR, "Валидация: Sender, Recipient либо FileSequenceNumber отсутствует в Notification. ");
+		SetErrorAndLog(std::string("Валидация: Sender, Recipient либо FileSequenceNumber отсутствует в Notification."));
 		return VALIDATION_IMPOSSIBLE;
 	}
 
 	if(!IsRecipientCorrect((char*) m_notification->recipient->buf)) {
-		log(LOG_ERROR, "Валидация: некорректный получатель " + string((char*) m_notification->recipient->buf));
+		SetErrorAndLog("Валидация: некорректный получатель " + string((char*) m_notification->recipient->buf));
 		return VALIDATION_IMPOSSIBLE;
 	}
 
@@ -1184,9 +1168,12 @@ void TAPValidator::Validate(DataInterChange* dataInterchange)
 			m_transferBatch = NULL;
 			break;
 		default:
+			SetErrorAndLog(std::string("Для валидации был передан неподдерживаемый тип данных TAP."));
 			m_validationResult = VALIDATION_IMPOSSIBLE;
 	}
 	if (!SetSenderNetworkID()) {
+		SetErrorAndLog(std::string("Невозможно найти в базе сеть отправителя по TAP-коду. Проверьте корректность "
+			"ее заведения. Файл не был загружен."));
 		m_validationResult = VALIDATION_IMPOSSIBLE;
 		return;
 	}
@@ -1197,15 +1184,15 @@ void TAPValidator::Validate(DataInterChange* dataInterchange)
 	case INCOMING_TAP_ALLOWED:
 		break;
 	case INCOMING_TAP_NOT_ALLOWED:
-		log(LOG_ERROR, "Валидация: Входящие TAP-файлы не разрешены для данной сети. Проверьте настройку поля "
-			"\"Вид роуминга\" в справочнике \"Привязка к роуминговому координатору\".");
+		SetErrorAndLog(std::string("Валидация: Входящие TAP-файлы не разрешены для данной сети. Проверьте настройку поля "
+			"\"Вид роуминга\" в справочнике \"Привязка к роуминговому координатору\"."));
 		m_validationResult = VALIDATION_IMPOSSIBLE;
 		return;
 	case UNABLE_TO_DETERMINE:
 	default:
-		log(LOG_ERROR, "Валидация: Невозможно определить, разрешены или нет входящие TAP-файлы для данной сети."
+		SetErrorAndLog(std::string("Валидация: Невозможно определить, разрешены или нет входящие TAP-файлы для данной сети."
 			" Проверьте настройки справочника \"Привязка к роуминговому координатору\". Возможно, сеть привязана"
-			" к одному координатору, а файлы поступают от другого.");
+			" к одному координатору, а файлы поступают от другого."));
 		m_validationResult = VALIDATION_IMPOSSIBLE;
 		return;
 	}
@@ -1232,7 +1219,17 @@ std::string TAPValidator::GetRapSequenceNum() const
 
 long TAPValidator::GetSenderNetworkID() const
 {
-	return m_mobileNetworkID;
+	if (m_mobileNetworkID > 0) {
+		return m_mobileNetworkID;
+	}
+	else {
+		otl_stream stream;
+		long networkID;
+		stream.open(1, "call BILLING.TAP3.GetUnrecognizedNetworkID() into :res /*long,out*/", m_otlConnect);
+		stream >> networkID;
+		stream.close();
+		return networkID;
+	}
 }
 
 
@@ -1245,4 +1242,15 @@ long TAPValidator::GetIOTValidationMode() const
 TAPValidationResult TAPValidator::GetValidationResult() const
 {
 	return m_validationResult;
+}
+
+void TAPValidator::SetErrorAndLog(std::string& error)
+{
+	m_validationError = error;
+	log(LOG_ERROR, error);
+}
+
+const std::string& TAPValidator::GetValidationError() const
+{
+	return m_validationError;
 }

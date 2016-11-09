@@ -1081,16 +1081,16 @@ void LoadNotificationHeader(long fileID, long roamingHubID, std::string filename
 	otlStream.open( 1 /*stream buffer size in logical rows*/, 
 		"insert into BILLING.TAP3_FILE (FILE_ID, MOBILENETWORK_ID, ROAMINGHUB_ID, FILENAME, SENDER, RECIPIENT, SEQUENCE_NUMBER , CREATION_STAMP, CREATION_UTCOFF,"
 		"CUTOFF_STAMP, CUTOFF_UTCOFF, AVAILABLE_STAMP, AVAILABLE_UTCOFF, LOAD_TIME, NOTIFICATION, TAP_VERSION, TAP_RELEASE, "
-		"FILE_TYPE_INDICATOR, STATUS, CANCEL_RAP_FILE_SEQNUM, CANCEL_RAP_FILE_ID) "
+		"FILE_TYPE_INDICATOR, STATUS, CANCEL_RAP_FILE_SEQNUM, CANCEL_RAP_FILE_ID, VALIDATION_ERROR) "
 		"values ("
 		":hfileid /*long,in*/, :mobilenetworkid /*long,in*/, :roamhubid /*long,in*/, :filename/*char[255],in*/, "
 		":sender/*char[20],in*/, :recipient/*char[20],in*/, :seq_num/*char[10],in*/,"
 		"to_date(:creation_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :creation_utcoff /* char[10],in*/,"
 		"to_date(:cutoff_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :cutoff_utcoff /* char[10],in*/,"
 		"to_date(:available_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :available_utcoff /* char[10],in*/,"
-		"sysdate, 1 /*notification*/, "
-		":tapVer /*long,in*/, :specif /*long,in*/, :filetype /*char[5],in*/, :status /*long,in*/,"
-		":cancel_rap_file_seqnum /*char[10],in*/, :cancel_rap_file_id /*long,in*/)", otlConnect); 
+		"sysdate, 1 /*notification*/, :tapVer /*long,in*/, :specif /*long,in*/, :filetype /*char[5],in*/, "
+		":status /*long,in*/, :cancel_rap_file_seqnum /*char[10],in*/, :cancel_rap_file_id /*long,in*/, "
+		":validation_error /*char[1000],in*/)", otlConnect); 
 	otlStream
 		<< fileID
 		<< tapValidator.GetSenderNetworkID()
@@ -1108,16 +1108,37 @@ void LoadNotificationHeader(long fileID, long roamingHubID, std::string filename
 		<< *dataInterchange->choice.notification.specificationVersionNumber
 		<< *dataInterchange->choice.notification.releaseVersionNumber
 		<< (dataInterchange->choice.notification.fileTypeIndicator ? (const char*) dataInterchange->choice.notification.fileTypeIndicator->buf : "");
-	if (tapValidator.GetValidationResult() == FATAL_ERROR) 
-		otlStream 
-			<< (long) INFILE_STATUS_FATAL
+	switch (tapValidator.GetValidationResult()) {
+	case TAP_VALID:
+		otlStream << (long)INFILE_STATUS_NEW;
+		break;
+	case FATAL_ERROR:
+		otlStream << (long)INFILE_STATUS_FATAL;
+		break;
+	case VALIDATION_IMPOSSIBLE:
+		otlStream << (long)INFILE_STATUS_UNABLE_TO_VALIDATE;
+		break;
+	default:
+		throw std::runtime_error("LoadNotificationhHeader: Unexpected tapValidator.GetValidationResult()");
+	}
+
+	if (tapValidator.GetValidationResult() == FATAL_ERROR) {
+		otlStream
 			<< tapValidator.GetRapSequenceNum()
 			<< tapValidator.GetRapFileID();
-	else
-		otlStream 
-			<< (long) INFILE_STATUS_NEW
+	}
+	else {
+		otlStream
 			<< otl_null()
 			<< otl_null();
+	}
+
+	if (tapValidator.GetValidationResult() != TAP_VALID) {
+		otlStream << tapValidator.GetValidationError();
+	}
+	else {
+		otlStream << otl_null();
+	}
 			
 	otlStream.flush();
 	otlStream.close();
@@ -1130,17 +1151,18 @@ void LoadTransferBatchHeader(long fileID, long roamingHubID, std::string filenam
 		"insert into BILLING.TAP3_FILE (FILE_ID, MOBILENETWORK_ID, ROAMINGHUB_ID, FILENAME, SENDER, RECIPIENT, SEQUENCE_NUMBER , CREATION_STAMP, CREATION_UTCOFF,"
 		"CUTOFF_STAMP, CUTOFF_UTCOFF, AVAILABLE_STAMP, AVAILABLE_UTCOFF, LOCAL_CURRENCY, LOAD_TIME, EARLIEST_TIME, EARLIEST_UTCOFF, "
 		"LATEST_TIME, LATEST_UTCOFF, EVENT_COUNT, TOTAL_CHARGE, TOTAL_TAX, TOTAL_DISCOUNT, NOTIFICATION, STATUS, TAP_VERSION, TAP_RELEASE, "
-		"FILE_TYPE_INDICATOR, TAP_DECIMAL_PLACES, CANCEL_RAP_FILE_SEQNUM, CANCEL_RAP_FILE_ID) "
-			"values ("
-			":hfileid /*long,in*/, :mobilenetworkid /*long,in*/, :roamhubid /*long,in*/, :filename/*char[255],in*/, "
-			":sender/*char[20],in*/, :recipient/*char[20],in*/, :seq_num/*char[10],in*/,"
-			"to_date(:creation_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :creation_utcoff /* char[10],in */,"
-			"to_date(:cutoff_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :cutoff_utcoff /* char[10],in */,"
-			"to_date(:available_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :available_utcoff /* char[10],in */,"
-			":local_currency /* char[255],in */, sysdate, to_date(:earliest /*char[20],in*/, 'yyyymmddhh24miss'), :earliest_utcoff /* char[10],in */,"
-			"to_date(:latest /*char[20],in*/, 'yyyymmddhh24miss'), :latest_utcoff /* char[10],in */, :eventcount /* long,in */, :totalchr /* double,in */, "
-			":total_tax /*double,in*/, :total_discount /*double,in*/, 0 /*notification*/, :status /*long,in*/, :tapVer /*long,in*/, :specif /*long,in*/, "
-			":filetype /*char[5],in*/, :tapDecimalPlaces /*long,in*/, :cancel_rap_file_seqnum /*char[10],in*/, :cancel_rap_file_id /*long,in*/) ", otlConnect);
+		"FILE_TYPE_INDICATOR, TAP_DECIMAL_PLACES, CANCEL_RAP_FILE_SEQNUM, CANCEL_RAP_FILE_ID, VALIDATION_ERROR) "
+		"values ("
+		":hfileid /*long,in*/, :mobilenetworkid /*long,in*/, :roamhubid /*long,in*/, :filename/*char[255],in*/, "
+		":sender/*char[20],in*/, :recipient/*char[20],in*/, :seq_num/*char[10],in*/,"
+		"to_date(:creation_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :creation_utcoff /* char[10],in */,"
+		"to_date(:cutoff_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :cutoff_utcoff /* char[10],in */,"
+		"to_date(:available_stamp /*char[20],in*/, 'yyyymmddhh24miss'), :available_utcoff /* char[10],in */,"
+		":local_currency /* char[255],in */, sysdate, to_date(:earliest /*char[20],in*/, 'yyyymmddhh24miss'), :earliest_utcoff /* char[10],in */,"
+		"to_date(:latest /*char[20],in*/, 'yyyymmddhh24miss'), :latest_utcoff /* char[10],in */, :eventcount /* long,in */, :totalchr /* double,in */, "
+		":total_tax /*double,in*/, :total_discount /*double,in*/, 0 /*notification*/, :status /*long,in*/, :tapVer /*long,in*/, :specif /*long,in*/, "
+		":filetype /*char[5],in*/, :tapDecimalPlaces /*long,in*/, :cancel_rap_file_seqnum /*char[10],in*/, "
+		":cancel_rap_file_id /*long,in*/, :validation_error /*char[1000],in*/) ", otlConnect);
 	otlStream
 		<< fileID
 		<< tapValidator.GetSenderNetworkID()
@@ -1191,10 +1213,20 @@ void LoadTransferBatchHeader(long fileID, long roamingHubID, std::string filenam
 	else
 		otlStream << otl_null();
 
-	if (tapValidator.GetValidationResult() == FATAL_ERROR)
-		otlStream << (long)INFILE_STATUS_FATAL;
-	else
+	switch (tapValidator.GetValidationResult()) {
+	case TAP_VALID:
 		otlStream << (long)INFILE_STATUS_NEW;
+		break;
+	case FATAL_ERROR:
+		otlStream << (long)INFILE_STATUS_FATAL;
+		break;
+	case VALIDATION_IMPOSSIBLE:
+		otlStream << (long)INFILE_STATUS_UNABLE_TO_VALIDATE;
+		break;
+	default:
+		throw std::runtime_error("LoadTransferBatchHeader: Unexpected tapValidator.GetValidationResult()");
+	}
+		
 
 	if (dataInterchange->choice.transferBatch.batchControlInfo->specificationVersionNumber)
 		otlStream << *dataInterchange->choice.transferBatch.batchControlInfo->specificationVersionNumber;
@@ -1213,17 +1245,34 @@ void LoadTransferBatchHeader(long fileID, long roamingHubID, std::string filenam
 	else
 		otlStream << otl_null();
 
-	if (tapValidator.GetValidationResult() == FATAL_ERROR)
+	if (tapValidator.GetValidationResult() == FATAL_ERROR) {
 		otlStream
-		<< tapValidator.GetRapSequenceNum()
-		<< tapValidator.GetRapFileID();
-	else
+			<< tapValidator.GetRapSequenceNum()
+			<< tapValidator.GetRapFileID();
+	}
+	else {
 		otlStream
-		<< otl_null()
-		<< otl_null();
+			<< otl_null()
+			<< otl_null();
+	}
+
+	if (tapValidator.GetValidationResult() != TAP_VALID) {
+		otlStream << tapValidator.GetValidationError();
+	}
+	else {
+		otlStream << otl_null();
+	}
 
 	otlStream.flush();
 	otlStream.close();
+}
+//----------------------------------------
+void DeleteNotValidatedFileHeader(long fileID, otl_connect& otlConnect )
+{
+	otl_nocommit_stream stream;
+	stream.open(1, "call BILLING.TAP3.DeleteNotValidatedFileHeader(:file_id /*long,in*/)", otlConnect);
+	stream << fileID;
+	stream.close();
 }
 //----------------------------------------
 int LoadTAPFileToDB( unsigned char* buffer, long dataLen, long fileID, long roamingHubID, bool bPrintOnly, otl_connect& otlConnect ) 
@@ -1255,11 +1304,11 @@ int LoadTAPFileToDB( unsigned char* buffer, long dataLen, long fileID, long roam
 			return TL_OK;
 		}
 
+		DeleteNotValidatedFileHeader(fileID, otlConnect);
 		TAPValidator tapValidator(otlConnect, config, roamingHubID);
 		tapValidator.Validate(dataInterchange);
 		if (tapValidator.GetValidationResult() == VALIDATION_IMPOSSIBLE) {
-			log(LOG_ERROR, "Невозможно провести валидацию TAP-файла. Файл не был загружен."); 
-			return TL_TAP_NOT_VALIDATED;
+			log(LOG_ERROR, "Невозможно провести валидацию TAP-файла. Будет загружен только заголовок файла"); 
 		}
 		else if (tapValidator.GetValidationResult() == FILE_DUPLICATION) {
 			// no uploading needed
@@ -1272,7 +1321,7 @@ int LoadTAPFileToDB( unsigned char* buffer, long dataLen, long fileID, long roam
 		}
 		else {
 			LoadTransferBatchHeader(fileID, roamingHubID, pShortName, tapValidator, otlConnect);
-			if (tapValidator.GetValidationResult() != FATAL_ERROR) {
+			if (tapValidator.GetValidationResult() == TAP_VALID) {
 				return LoadTAPEventsToDB(fileID, tapValidator.GetIOTValidationMode(), roamingHubID, otlConnect);
 			}
 			else {
@@ -1290,10 +1339,14 @@ int LoadTAPFileToDB( unsigned char* buffer, long dataLen, long fileID, long roam
 			log(pShortName,  LOG_ERROR, (char*) otlEx.var_info ); // log the variable that caused the error
 		return TL_ORACLEERROR;
 	}
-	
+	catch(const std::exception& ex) {
+		log(pShortName, LOG_ERROR, string("Исключение: ") + ex.what() + string(". Номер звонка ") + 
+			to_string( static_cast<unsigned long long> (index)));
+	}
 	catch(char* pMess)
 	{
-		log(pShortName, LOG_ERROR, string("Исключение: ") + string(pMess) + string(". Номер звонка ") + to_string( static_cast<unsigned long long> (index)));
+		log(pShortName, LOG_ERROR, string("Исключение: ") + string(pMess) + string(". Номер звонка ") + 
+			to_string( static_cast<unsigned long long> (index)));
 		return TL_WRONGCODE;
 	}
 	return TL_OK;
@@ -1933,7 +1986,7 @@ int main(int argc, const char* argv[])
 			Finalize(otlConnect, res == TL_OK);
 			return res;
 		}
-		
+		return TL_OK;		
 	}
 	catch(...)
 	{
@@ -1942,10 +1995,6 @@ int main(int argc, const char* argv[])
 		Finalize(otlConnect, false);
 		return TL_UNKNOWN;
 	}
-
-	//Finalize(otlConnect, true);
-
-	return TL_OK;
 }
 
 BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
@@ -1975,6 +2024,7 @@ __declspec (dllexport) int __stdcall LoadFileToDB(char* pFilename, long fileID, 
 	string strFileID = to_string ((unsigned long long) fileID);
 	string strRoamHubID = to_string((unsigned long long) roamingHubID);
 	const char* pArgv[] = { "TAP3Loader.exe", pFilename, strFileID.c_str(), strRoamHubID.c_str(), pConfigFilename };
+	int loadRes = main(mainArgsCount, pArgv);
 	LeaveCriticalSection(&loadCritSection);
-	return main(mainArgsCount, pArgv);
+	return loadRes;
 }

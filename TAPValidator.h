@@ -131,6 +131,7 @@ public:
 	long GetSenderNetworkID() const;
 	long GetIOTValidationMode() const;
 	TAPValidationResult GetValidationResult() const;
+	const std::string& GetValidationError() const;
 private:
 	otl_connect& m_otlConnect;
 	Config& m_config;
@@ -144,12 +145,14 @@ private:
 	long m_roamingHubID;
 	std::string m_rapSequenceNum;
 	TAPValidationResult m_validationResult;
+	std::string m_validationError;
 	RAPFile m_rapFile;
 
 	bool SetSenderNetworkID();
 	void SetIOTValidationMode();
 	bool IsRecipientCorrect(string recipient);
 	bool IsTestFile();
+	void SetErrorAndLog(std::string& error);
 	FileDuplicationCheckRes IsFileDuplicated();
 	IncomingTAPAllowed IsIncomingTAPAllowed();
 	TAPValidationResult FileSequenceNumberControl();
@@ -169,6 +172,7 @@ private:
 	int CreateAccountingInfoRAPFile(string logMessage, int errorCode, const vector<ErrContextAsnItem>& asnItems);
 	int CreateNetworkInfoRAPFile(string logMessage, int errorCode, const vector<ErrContextAsnItem>& asnItems);
 	int CreateAuditControlInfoRAPFile(string logMessage, int errorCode, const vector<ErrContextAsnItem>& asnItems);
+	int CreateAndUploadRapFile(ReturnDetail* returnDetail);
 
 	int CreateSevereRAPFile(string logMessage, int errorCode, const vector<ErrContextAsnItem>& asnItems);
 
