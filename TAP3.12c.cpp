@@ -17,13 +17,13 @@
 
 
 const char *pShortName;
-unsigned char* buffer = NULL;		// буфер для загрузки содержимого файла
+
 long TapFileID;						// ID TAP-файла в таблице TAP3_FILE
 int debugMode = 0;
 DataInterChange* dataInterchange = NULL;
 ReturnBatch* returnBatch = NULL;
 Acknowledgement* acknowledgement = NULL;
-Config config;
+
 CRITICAL_SECTION loadCritSection;
 
 //otl_connect otlConnect;
@@ -48,7 +48,7 @@ void logToFile(string message)
 		<< now->tm_hour << ':' << now->tm_min << ':' << now->tm_sec << ' ' << message << endl;
 }
 //-----------------------------
-void log(string filename, short msgType, string msgText)
+void log(string filename, short msgType, string msgText, string dbConnectString = "")
 {
 	static otl_connect otlLogConnect;
 	if (otlLogConnect.connected) {
@@ -72,20 +72,24 @@ void log(string filename, short msgType, string msgText)
 		}
 	}
 	else {
-		try {
-			otlLogConnect.rlogon(config.GetConnectString().c_str());
-			log(filename, msgType, msgText);
+		if (!dbConnectString.empty()) {
+			try {
+				otlLogConnect.rlogon(dbConnectString.c_str());
+				log(filename, msgType, msgText);
+			}
+			catch (otl_exception &otlEx) {
+				logToFile(to_string(static_cast<unsigned long long> (msgType)) + '\t' + msgText);
+			}
 		}
-		catch (otl_exception &otlEx) {
-			logToFile(to_string(static_cast<unsigned long long> ( msgType )) + '\t' + msgText);
+		else {
+			logToFile(msgText);
 		}
-	
 	}
 }
 //------------------------------
-void log(short msgType, string msgText)
+void log(short msgType, string msgText, string dbConnectString = "")
 {
-	log(pShortName, msgType, msgText);
+	log(pShortName, msgType, msgText, dbConnectString);
 }
 //--------------------------------
 int assign_integer_option(string _name, string _value, long& param, long minValid, long maxValid)
@@ -1009,10 +1013,9 @@ void Finalize(otl_connect& otlConnect, bool bSuccess)
 	}
 
 	if(ofsLog.is_open()) ofsLog.close();
-	if (buffer ) delete [] buffer;
 }
 //------------------------------
-int LoadTAPEventsToDB(long fileID, long iotValidationMode, long roamingHubID, otl_connect& otlConnect)
+int LoadTAPEventsToDB(long fileID, long iotValidationMode, long roamingHubID, otl_connect& otlConnect, Config& config)
 {
 	long long eventID;
 	CallValidationResult validationRes;
@@ -1275,11 +1278,13 @@ void DeleteNotValidatedFileHeader(long fileID, otl_connect& otlConnect )
 	stream.close();
 }
 //----------------------------------------
-int LoadTAPFileToDB( unsigned char* buffer, long dataLen, long fileID, long roamingHubID, bool bPrintOnly, otl_connect& otlConnect ) 
+int LoadTAPFileToDB( unsigned char* buffer, long dataLen, long fileID, long roamingHubID, bool bPrintOnly, 
+		otl_connect& otlConnect, Config& config) 
 {
 	int index=0;
 	try {
 		asn_dec_rval_t rval;
+		dataInterchange = NULL;
 		rval = ber_decode(0, &asn_DEF_DataInterChange, (void**) &dataInterchange, buffer, dataLen);
 		if(rval.code != RC_OK) {
 			log( LOG_ERROR, string("Ошибка ASN-декодирования файла. Код ошибки ") + 
@@ -1322,7 +1327,7 @@ int LoadTAPFileToDB( unsigned char* buffer, long dataLen, long fileID, long roam
 		else {
 			LoadTransferBatchHeader(fileID, roamingHubID, pShortName, tapValidator, otlConnect);
 			if (tapValidator.GetValidationResult() == TAP_VALID) {
-				return LoadTAPEventsToDB(fileID, tapValidator.GetIOTValidationMode(), roamingHubID, otlConnect);
+				return LoadTAPEventsToDB(fileID, tapValidator.GetIOTValidationMode(), roamingHubID, otlConnect, config);
 			}
 			else {
 				return TL_OK;
@@ -1863,7 +1868,8 @@ int main(int argc, const char* argv[])
 		return TL_FILEERROR ;
 	}
 
-	otl_connect::otl_initialize(); // initialize OCI environment
+	const int OTL_MULTITHREADED_MODE = 1;
+	otl_connect::otl_initialize(OTL_MULTITHREADED_MODE); // initialize OCI environment
 	otl_connect otlConnect;
 	// установим тип файла
 	FileType fileType;
@@ -1881,13 +1887,14 @@ int main(int argc, const char* argv[])
 	}
 
 	int index=0;
+	
 	try {
+		Config config;
 		// чтение файла конфигурации
 		const char* configFilename = strlen(argv[4]) > 0 ? argv[4] : "TAP3Loader.cfg";
 		ifstream ifsSettings(configFilename, ifstream::in);
 		if (!ifsSettings.is_open())	{
 			log( LOG_ERROR, string("Невозможно открыть файл конфигурации ") + configFilename);
-			if( buffer ) delete [] buffer;
 			return TL_PARAM_ERROR;
 		}
 		config.ReadConfigFile(ifsSettings);
@@ -1901,21 +1908,20 @@ int main(int argc, const char* argv[])
 
 		FILE *fTapFile=fopen(argv[1],"rb");
 		if(!fTapFile) {
-			log( LOG_ERROR, string ("Невозможно открыть файл ") + argv[1]);
+			log( LOG_ERROR, string ("Невозможно открыть файл ") + argv[1], config.GetConnectString());
 			return TL_PARAM_ERROR;
 		}
 
 		fseek(fTapFile, 0, SEEK_END);
 		unsigned long tapFileLen=ftell(fTapFile); // длина данных файла (без заголовка)
-	
-		buffer = new unsigned char [tapFileLen];
-
+		unsigned char* buffer = new unsigned char [tapFileLen];
+		
 		fseek(fTapFile, 0, SEEK_SET);
 		size_t bytesRead=fread(buffer, 1, tapFileLen, fTapFile);
 		fclose(fTapFile);
 		if(bytesRead < tapFileLen)
 		{
-			log( LOG_ERROR, string("Ошибка чтения данных файла ") + argv[1]);
+			log( LOG_ERROR, string("Ошибка чтения данных файла ") + argv[1], config.GetConnectString());
 			delete [] buffer;
 			return TL_FILEERROR;
 		}
@@ -1946,47 +1952,55 @@ int main(int argc, const char* argv[])
 				log( LOG_ERROR, (char*) otlEx.var_info ); // log the variable that caused the error
 			log( LOG_ERROR, "---- TAP3 loader завершил работу с ошибками, см. журнал ----");
 			if(ofsLog.is_open()) ofsLog.close();
+			delete [] buffer;
 			return TL_CONNECTERROR; 
 		}
 		
 		int res;
 		switch( fileType ) {
 		case ftTAP:
-			log(LOG_INFO, "--------- Загрузка TAP3-файла (ID " + to_string((long long) fileID)+") начата ---------");
-			res = LoadTAPFileToDB( buffer, tapFileLen, fileID, roamingHubID, bPrintOnly, otlConnect ) ; 
-			if (res == TL_OK)
-				log(LOG_INFO, "--------- Загрузка TAP3-файла (ID " + to_string((long long)fileID) + 
+			log(LOG_INFO, "--------- Загрузка TAP3-файла (ID " + to_string((long long) fileID)+") начата ---------", 
+				config.GetConnectString());
+			res = LoadTAPFileToDB( buffer, tapFileLen, fileID, roamingHubID, bPrintOnly, otlConnect, config) ; 
+			if (res == TL_OK) {
+				log(LOG_INFO, "--------- Загрузка TAP3-файла (ID " + to_string((long long)fileID) +
 					") завершена успешно ---------");
-			else
-				log(LOG_INFO, "--------- Загрузка TAP3-файла (ID " + to_string((long long)fileID) + 
+			}
+			else {
+				log(LOG_INFO, "--------- Загрузка TAP3-файла (ID " + to_string((long long)fileID) +
 					") завершена с ошибками ---------");
-			Finalize(otlConnect, res == TL_OK);
-			return res;
+			}
+			break;
 		case ftRAP:
-			log(LOG_INFO, "--------- Загрузка RAP-файла (ID " + to_string((long long) fileID) + ") начата ---------");
+			log(LOG_INFO, "--------- Загрузка RAP-файла (ID " + to_string((long long) fileID) + ") начата ---------", 
+				config.GetConnectString());
 			res = LoadRAPFileToDB( buffer, tapFileLen, fileID, roamingHubID, bPrintOnly, otlConnect ) ; 
-			if (res == TL_OK)
-				log(LOG_INFO, "--------- Загрузка RAP-файла (ID " + to_string((long long)fileID) + 
+			if (res == TL_OK) {
+				log(LOG_INFO, "--------- Загрузка RAP-файла (ID " + to_string((long long)fileID) +
 					") завершена успешно ---------");
-			else
-				log(LOG_INFO, "--------- Загрузка RAP-файла (ID " + to_string((long long)fileID) + 
+			}
+			else {
+				log(LOG_INFO, "--------- Загрузка RAP-файла (ID " + to_string((long long)fileID) +
 					") завершена с ошибками ---------");
-			Finalize(otlConnect, res == TL_OK);
-			return res;
+			}
+			break;
 		case ftRAPAcknowledgement:
 			log(LOG_INFO, "--------- Загрузка RAP Acknowledgement-файла (ID " + to_string((long long) fileID) + 
-					") начата ---------");
+					") начата ---------", config.GetConnectString());
 			res = LoadRAPAckToDB(buffer, tapFileLen, fileID, roamingHubID, bPrintOnly, otlConnect);
-			if (res == TL_OK)
-				log(LOG_INFO, "--------- Загрузка RAP Acknowledgement-файла (ID " + to_string((long long)fileID) + 
+			if (res == TL_OK) {
+				log(LOG_INFO, "--------- Загрузка RAP Acknowledgement-файла (ID " + to_string((long long)fileID) +
 					") завершена успешно ---------");
-			else
-				log(LOG_INFO, "--------- Загрузка RAP Acknowledgement-файла (ID " + to_string((long long)fileID) + 
+			}
+			else {
+				log(LOG_INFO, "--------- Загрузка RAP Acknowledgement-файла (ID " + to_string((long long)fileID) +
 					") завершена с ошибками ---------");
-			Finalize(otlConnect, res == TL_OK);
-			return res;
+			}
+			break;
 		}
-		return TL_OK;		
+		Finalize(otlConnect, res == TL_OK);
+		delete [] buffer;
+		return res;
 	}
 	catch(...)
 	{

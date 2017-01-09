@@ -13,11 +13,11 @@
 
 int main(int argc, const char* argv[])
 {
-	const char* tapLoaderDLL = "c:\\Projects\\TAP3\\TAP3\\TAP3.12_Loader\\DLL Release\\TAP3.Loader.dll";
-	const char* sampleFile = "SampleFiles\\CDRUSNWRUS2700391";
+	const char* tapLoaderDLL = "c:\\Projects\\TAP3\\TAP3\\TAP3.12_Loader\\DLL Debug\\TAP3.Loader.dll";
+	const char* sampleFile = "c:\\Projects\\TAP3\\TAP3\\TAP3.12_Loader\\Tests\\SampleFiles\\CDRUSNWRUS2700391";
 	const long fileID = 1001110;
 	const long roamingHubID = 624467901;
-	const char* configFile = "Tests.cfg";
+	const char* configFile = "c:\\Projects\\TAP3\\TAP3\\TAP3.12_Loader\\Tests\\Tests.cfg";
 
 	HINSTANCE hinstDLL = nullptr;
 	otl_connect otlConnect;
@@ -56,6 +56,9 @@ int main(int argc, const char* argv[])
 		otlStream.open(1, "call BILLING.TAP3_TESTS.ClearPreviousUpload(:filename /*char[20],in*/)", otlConnect);
 		otlStream << shortFilename;
 		otlStream.close();
+		otlStream.open(1, "call BILLING.TAP3_TESTS.DisableExchangeRateCheck()", otlConnect);
+		otlStream << shortFilename;
+		otlStream.close();
 		otlConnect.commit();
 		
 		int(__stdcall * LoadFileToDB) (char*, long, long, char*);
@@ -78,7 +81,38 @@ int main(int argc, const char* argv[])
 		otlStream << shortFilename;
 		otlStream << fileID;
 		otlStream.close();
+		
+		// TODO: don't unload library, fix exception when second call to LoadFile
+		/*FreeLibrary(hinstDLL);
+		hinstDLL = LoadLibrary(tapLoaderDLL);
+		if (!hinstDLL) {
+			std::cout << "Unable to load library " << tapLoaderDLL;
+			throw std::exception();
+		}
+		LoadFileToDB = (int(__stdcall *) (char*, long, long, char*)) GetProcAddress(hinstDLL, "LoadFileToDB");
+		if (!LoadFileToDB) {
+			std::cout << "Unable to GetProcAddress LoadFileToDB ";
+			throw std::exception();
+		}*/
+		otlStream.open(1, "call BILLING.TAP3_TESTS.ClearPreviousUpload(:filename /*char[20],in*/)", otlConnect);
+		otlStream << shortFilename;
+		otlStream.close();
+		otlStream.open(1, "call BILLING.TAP3_TESTS.EnableExchangeRateCheck()", otlConnect);
+		otlStream.close();
+		otlStream.open(1, "call BILLING.TAP3_TESTS.EnsureExchangeRateIsWrong()", otlConnect);
+		otlStream.close();
+		otlConnect.commit();
 
+		res = (LoadFileToDB)(const_cast<char*>(sampleFile), fileID, roamingHubID, const_cast<char*>(configFile));
+		std::cout << "LoadFileToDB result: " << res << std::endl;
+		if (res != TL_OK) {
+			throw std::exception();
+		}
+		otlStream.open(1, "call BILLING.TAP3_TESTS.CheckFatalUpload(:file_id /*long,in*/)", otlConnect);
+		otlStream << fileID;
+		otlStream.close();
+		otlStream.open(1, "call BILLING.TAP3_TESTS.ValidateFatalLogging()", otlConnect);
+		otlStream.close();
 		std::cout << "Tests PASSED. " << std::endl; 
 	}
 	catch (otl_exception &otlEx) {
@@ -93,6 +127,7 @@ int main(int argc, const char* argv[])
 	catch(const std::exception& ex) {
 		std::cout << "Tests FAILED" << std::endl;
 	}
+
 	if (otlConnect.connected) {
 		otlConnect.commit();
 		otlConnect.logoff();

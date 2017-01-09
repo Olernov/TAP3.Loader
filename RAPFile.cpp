@@ -9,8 +9,8 @@ using namespace std;
 
 #define NO_ASN_ITEMS	vector<ErrContextAsnItem>()
 
-extern void log(string filename, short msgType, string msgText);
-extern void log(short msgType, string msgText);
+extern void log(string filename, short msgType, string msgText, string dbConnectString = "");
+extern void log(short msgType, string msgText, string dbConnectString = "");
 extern long long OctetStr2Int64(const OCTET_STRING_t& octetStr);
 extern int LoadReturnBatchToDB(ReturnBatch* returnBatch, long fileID, long roamingHubID, string rapFilename, 
 	long fileStatus, otl_connect& otlConnect);

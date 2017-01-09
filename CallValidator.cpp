@@ -11,7 +11,7 @@
 using namespace std;
 
 extern long long OctetStr2Int64(const OCTET_STRING_t& octetStr);
-extern void log(string filename, short msgType, string msgText);
+extern void log(string filename, short msgType, string msgText, string dbConnectString = "");
 
 CallValidator::CallValidator(otl_connect& otlConnect, const TransferBatch* transferBatch, Config& config, long roamingHubID) :
 	m_otlConnect(otlConnect),
@@ -85,8 +85,9 @@ CallAgeValidationResult CallValidator::ValidateAgeAndCreateRAP(long long eventID
 
 IOTValidationResult CallValidator::ValidateIOTAndCreateRAP(long long eventID, CallTypeForValidation callType, int callIndex, long iotValidationMode)
 {
-	if (iotValidationMode == IOT_NO_NEED)
+	if (iotValidationMode == IOT_NO_NEED) {
 		return IOT_VALID;
+	}
 	otl_nocommit_stream otlStream;
 	switch (callType) {
 	case TELEPHONY_CALL:
