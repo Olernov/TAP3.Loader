@@ -3,20 +3,33 @@
 
 #include <stdio.h>
 #include <conio.h>
+#include <string.h>
 #include <iostream>
 #include <fstream>
+#include <future>
 #include "windows.h"
 #include "OTL_Header.h"
 #include "ConfigContainer.h"
 #include "TAP_Constants.h"
 
 
+const char* ExtractShortName(const char* fullName)
+{
+	const char *shortName = strrchr(fullName, '\\');
+	if (!shortName) {
+		shortName = fullName;
+	}
+	else {
+		shortName++;
+	}
+	return shortName;
+}
 int main(int argc, const char* argv[])
 {
-	const char* tapLoaderDLL = "c:\\Projects\\TAP3\\TAP3\\TAP3.12_Loader\\DLL Debug\\TAP3.Loader.dll";
+	const char* tapLoaderDLL = "c:\\Projects\\TAP3\\TAP3\\TAP3.12_Loader\\DLL Release\\TAP3.Loader.dll";
 	const char* sampleFile = "c:\\Projects\\TAP3\\TAP3\\TAP3.12_Loader\\Tests\\SampleFiles\\CDRUSNWRUS2700391";
 	const long fileID = 1001110;
-	const long roamingHubID = 624467901;
+	const long comfoneHubID = 624467901;
 	const char* configFile = "c:\\Projects\\TAP3\\TAP3\\TAP3.12_Loader\\Tests\\Tests.cfg";
 
 	HINSTANCE hinstDLL = nullptr;
@@ -68,7 +81,7 @@ int main(int argc, const char* argv[])
 			throw std::exception();
 		}
 				
-		int res = (LoadFileToDB)(const_cast<char*>(sampleFile), fileID, roamingHubID, const_cast<char*>(configFile));
+		int res = (LoadFileToDB)(const_cast<char*>(sampleFile), fileID, comfoneHubID, const_cast<char*>(configFile));
 		std::cout << "LoadFileToDB result: " << res << std::endl;
 		if (res != TL_OK) {
 			throw std::exception();
@@ -82,18 +95,6 @@ int main(int argc, const char* argv[])
 		otlStream << fileID;
 		otlStream.close();
 		
-		// TODO: don't unload library, fix exception when second call to LoadFile
-		/*FreeLibrary(hinstDLL);
-		hinstDLL = LoadLibrary(tapLoaderDLL);
-		if (!hinstDLL) {
-			std::cout << "Unable to load library " << tapLoaderDLL;
-			throw std::exception();
-		}
-		LoadFileToDB = (int(__stdcall *) (char*, long, long, char*)) GetProcAddress(hinstDLL, "LoadFileToDB");
-		if (!LoadFileToDB) {
-			std::cout << "Unable to GetProcAddress LoadFileToDB ";
-			throw std::exception();
-		}*/
 		otlStream.open(1, "call BILLING.TAP3_TESTS.ClearPreviousUpload(:filename /*char[20],in*/)", otlConnect);
 		otlStream << shortFilename;
 		otlStream.close();
@@ -103,7 +104,7 @@ int main(int argc, const char* argv[])
 		otlStream.close();
 		otlConnect.commit();
 
-		res = (LoadFileToDB)(const_cast<char*>(sampleFile), fileID, roamingHubID, const_cast<char*>(configFile));
+		res = (LoadFileToDB)(const_cast<char*>(sampleFile), fileID, comfoneHubID, const_cast<char*>(configFile));
 		std::cout << "LoadFileToDB result: " << res << std::endl;
 		if (res != TL_OK) {
 			throw std::exception();
@@ -113,6 +114,64 @@ int main(int argc, const char* argv[])
 		otlStream.close();
 		otlStream.open(1, "call BILLING.TAP3_TESTS.ValidateFatalLogging()", otlConnect);
 		otlStream.close();
+
+		// multi-threaded tests
+		const long sparkleHubID = 935076610;
+		const long mtsHubID = 981304980;
+		char* sparkleTapFiles[] = { "c:\\Projects\\TAP3\\TAP3\\TAP3.12_Loader\\Tests\\SampleFiles\\CDBLR02RUST700001",
+			"c:\\Projects\\TAP3\\TAP3\\TAP3.12_Loader\\Tests\\SampleFiles\\CDBLR02RUST700002",
+			"c:\\Projects\\TAP3\\TAP3\\TAP3.12_Loader\\Tests\\SampleFiles\\CDBLRMDRUST700001",
+			"c:\\Projects\\TAP3\\TAP3\\TAP3.12_Loader\\Tests\\SampleFiles\\CDBLRMDRUST700002",
+			"c:\\Projects\\TAP3\\TAP3\\TAP3.12_Loader\\Tests\\SampleFiles\\CDBLRMDRUST700003",
+			"c:\\Projects\\TAP3\\TAP3\\TAP3.12_Loader\\Tests\\SampleFiles\\CDKAZKZRUST700001"		
+		};
+		char* mtsTapFiles[] = { "c:\\Projects\\TAP3\\TAP3\\TAP3.12_Loader\\Tests\\SampleFiles\\CDRUS01RUS2700248" };
+		char* comfoneTapFiles[] = { "c:\\Projects\\TAP3\\TAP3\\TAP3.12_Loader\\Tests\\SampleFiles\\TDLIEK9RUS2700001" };
+		
+		for (auto& filename : sparkleTapFiles) {
+			otlStream.open(1, "call BILLING.TAP3_TESTS.ClearPreviousUpload(:filename /*char[20],in*/)", otlConnect);
+			otlStream << ExtractShortName(filename);
+			otlStream.close();
+		}
+		for (auto& filename : mtsTapFiles) {
+			otlStream.open(1, "call BILLING.TAP3_TESTS.ClearPreviousUpload(:filename /*char[20],in*/)", otlConnect);
+			otlStream << ExtractShortName(filename);
+			otlStream.close();
+		}
+		for (auto& filename : comfoneTapFiles) {
+			otlStream.open(1, "call BILLING.TAP3_TESTS.ClearPreviousUpload(:filename /*char[20],in*/)", otlConnect);
+			otlStream << ExtractShortName(filename);
+			otlStream.close();
+		}
+		otlConnect.commit();
+
+		std::vector<std::future<int>> results;
+		long nextFileID = fileID + 10;
+		for (auto& filename : sparkleTapFiles) {
+			results.push_back(std::async(launch::async, LoadFileToDB, filename, nextFileID, sparkleHubID, const_cast<char*>(configFile)));
+			nextFileID++;
+		}
+		for (auto& filename : mtsTapFiles) {
+			results.push_back(std::async(launch::async, LoadFileToDB, filename, nextFileID, mtsHubID, const_cast<char*>(configFile)));
+			nextFileID++;
+		}
+		for (auto& filename : comfoneTapFiles) {
+			results.push_back(std::async(launch::async, LoadFileToDB, filename, nextFileID, comfoneHubID, const_cast<char*>(configFile)));
+			nextFileID++;
+		}
+		
+		bool loadFail = false;
+		for(auto &res : results) {
+			int loadRes = res.get();
+	       std::cout << "LoadFileToDB result: " << loadRes << std::endl;
+			if (loadRes != TL_OK) {
+				loadFail = true;
+			}
+		}	
+		if (loadFail) {
+			throw std::exception();
+		}
+
 		std::cout << "Tests PASSED. " << std::endl; 
 	}
 	catch (otl_exception &otlEx) {
@@ -125,7 +184,7 @@ int main(int argc, const char* argv[])
 		std::cout << "Tests FAILED" << std::endl;
 	}
 	catch(const std::exception& ex) {
-		std::cout << "Tests FAILED" << std::endl;
+		std::cout << "Tests FAILED: " << ex.what() << std::endl;
 	}
 
 	if (otlConnect.connected) {

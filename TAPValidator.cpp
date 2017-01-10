@@ -1168,7 +1168,8 @@ void TAPValidator::Validate(DataInterChange* dataInterchange)
 			m_transferBatch = NULL;
 			break;
 		default:
-			SetErrorAndLog(std::string("Для валидации был передан неподдерживаемый тип данных TAP."));
+			SetErrorAndLog(std::string("Для валидации был передан неподдерживаемый тип данных TAP: ") + 
+				std::to_string(static_cast<long long>(dataInterchange->present)));
 			m_validationResult = VALIDATION_IMPOSSIBLE;
 	}
 	if (!SetSenderNetworkID()) {

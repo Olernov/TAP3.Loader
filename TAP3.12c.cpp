@@ -18,15 +18,11 @@
 
 const char *pShortName;
 
-long TapFileID;						// ID TAP-файла в таблице TAP3_FILE
-int debugMode = 0;
 DataInterChange* dataInterchange = NULL;
 ReturnBatch* returnBatch = NULL;
 Acknowledgement* acknowledgement = NULL;
 
 CRITICAL_SECTION loadCritSection;
-
-//otl_connect otlConnect;
 
 ofstream ofsLog;
 
@@ -1058,12 +1054,10 @@ int LoadTAPEventsToDB(long fileID, long iotValidationMode, long roamingHubID, ot
 					return TL_TAP_NOT_VALIDATED;
 			break;
 		default:
-			if (!debugMode) {
-				log(pShortName, LOG_ERROR, string("Не найден обработчик события с кодом ") + 
-					to_string( static_cast<unsigned long long> (dataInterchange->choice.transferBatch.callEventDetails->list.array[index-1]->present)) +
-					string(". Номер звонка ") + to_string(static_cast<unsigned long long> (index+1)));
-				return TL_NEWCOMPONENT;
-			}
+			log(pShortName, LOG_ERROR, string("Не найден обработчик события с кодом ") + 
+				to_string( static_cast<unsigned long long> (dataInterchange->choice.transferBatch.callEventDetails->list.array[index-1]->present)) +
+				string(". Номер звонка ") + to_string(static_cast<unsigned long long> (index+1)));
+			return TL_NEWCOMPONENT;
 		}
 	}
 	RAPFile& rapFile = callValidator.GetRAPFile();
@@ -1580,12 +1574,10 @@ int LoadRAPSevereReturn(long fileID, const SevereReturn& severeReturn, otl_conne
 			
 			break;
 		default:
-			if (!debugMode) {
-				log(LOG_ERROR, string("Не найден обработчик для ") + to_string(static_cast<unsigned long long> 
-						(dataInterchange->choice.transferBatch.callEventDetails->list.array[index - 1]->present)) +
-					string(". Номер звонка ") + to_string(static_cast<unsigned long long> (index)));
-				return TL_NEWCOMPONENT;
-			}
+			log(LOG_ERROR, string("Не найден обработчик для ") + to_string(static_cast<unsigned long long> 
+					(dataInterchange->choice.transferBatch.callEventDetails->list.array[index - 1]->present)) +
+				string(". Номер звонка ") + to_string(static_cast<unsigned long long> (index)));
+			return TL_NEWCOMPONENT;
 	}
 
 	otl_nocommit_stream otlStream;
@@ -1730,7 +1722,7 @@ int LoadRAPFileToDB( unsigned char* buffer, long dataLen, long fileID, long roam
 	int index=0;
 	try {
 		asn_dec_rval_t rval;
-
+		returnBatch = NULL;
 		rval = ber_decode(0, &asn_DEF_ReturnBatch, (void**) &returnBatch, buffer, dataLen);
 
 		if (rval.code != RC_OK) {
@@ -1772,7 +1764,7 @@ int LoadRAPFileToDB( unsigned char* buffer, long dataLen, long fileID, long roam
 int LoadRAPAckToDB(unsigned char* buffer, long dataLen, long fileID, long roamingHubID, bool bPrintOnly, otl_connect& otlConnect)
 {
 	asn_dec_rval_t rval;
-
+	acknowledgement = NULL;
 	rval = ber_decode(0, &asn_DEF_Acknowledgement, (void**)& acknowledgement, buffer, dataLen);
 
 	if (rval.code != RC_OK) {
