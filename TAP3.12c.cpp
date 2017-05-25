@@ -1895,7 +1895,7 @@ int main(int argc, const char* argv[])
 		if (config.GetConnectString().empty()) {
 			log(LOG_ERROR, string("Строка подключения к БД не найдена в конфиг-файле ") + configFilename);
 			ofsLog.close();
-			exit(TL_FILEERROR);
+			return TL_FILEERROR;
 		}
 
 		FILE *fTapFile=fopen(argv[1],"rb");
